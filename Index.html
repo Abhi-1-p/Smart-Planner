@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Planner & Journal</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Patrick+Hand&display=swap" rel="stylesheet">
+
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .handwritten { font-family: 'Patrick Hand', cursive; }
+        input::placeholder, textarea::placeholder { font-family: 'Patrick Hand', cursive; }
+
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+    </style>
+</head>
+
+<body class="bg-[#F8F9FA]">
+<div id="root"></div>
+
+<script type="text/babel" data-type="module">
+
+/* ------------------------------------------------------
+   IMPORTS
+------------------------------------------------------ */
+// Using pinned versions and shared dependencies to prevent React instance mismatch (Error #31)
+import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
+import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+import { 
+    Plus, User, LogOut, Save, Calendar, CheckCircle2, 
+    Circle, Trash2, Droplet, Star, Utensils, Activity,
+    Archive, ChevronLeft, X
+} from 'https://esm.sh/lucide-react?deps=react@18.2.0';
+
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+import { 
+    getFirestore, doc, setDoc, getDoc, collection,
+    onSnapshot, query, where
+} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+import {
+    getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+
+// Expose React globally for Babel's transpiled createElement calls
+window.React = React;
+window.ReactDOM = ReactDOM;
+
+/* ------------------------------------------------------
+   FIREBASE INIT
+------------------------------------------------------ */
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'daily-planner-v1';
+
+/* ------------------------------------------------------
+   THEME DEFINITIONS
+------------------------------------------------------ */
+const THEMES = {
+    mint: { bg: '#B8E1DD', light: '#E3F2F1', dark: '#86B5B0' },
+    blush: { bg: '#FFD1DC', light: '#FFF0F3', dark: '#E0A3B1' },
+    lavender: { bg: '#E0BBE4', light: '#F3E8F5', dark: '#B391B8' }
+};
+
+/* ------------------------------------------------------
+   MAIN APP COMPONENT
+------------------------------------------------------ */
+function App() {
+
+    /* ---------------------- STATE ---------------------- */
+    const [user, setUser] = useState(null);
+    const [profiles, setProfiles] = useState([]);
+    const [activeProfile, setActiveProfile] = useState(null);
+    const [currentView, setCurrentView] = useState("dashboard");
+    const [showGateway, setShowGateway] = useState(true);
+
+    const [dailyData, setDailyData] = useState(getInitialDailyData());
+    const [archiveEntries, setArchiveEntries] = useState([]);
+
+    const [isSaving, setIsSaving] = useState(false);
+    const [showAddProfile, setShowAddProfile] = useState(false);
+
+    const [newProfile, setNewProfile] = useState({
+        name: "",
+        color: "mint"
+    });
+
+    function getInitialDailyData() {
+        return {
+            date: new Date().toISOString().split("T")[0],
+            priorities: [],
+            todos: [],
+            schedule: Array.from({ length: 13 }, (_, i) => ({ time: `${i + 9}:00`, task: '' })),
+            meals: { breakfast: '', lunch: '', dinner: '' },
+            water: 0,
+            journal: '',
+            expenses: [],
+            ratings: { productivity: 0, mood: 0, health: 0 },
+            fitness: { title: '', value: '' }
+        };
+    }
+
+    /* ---------------------- AUTH ---------------------- */
+    useEffect(() => {
+        const initAuth = async () => {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        };
+        initAuth();
+        const unsubscribe = onAuthStateChanged(auth, setUser);
+        return () => unsubscribe();
+    }, []);
+
+    /* ---------------------- LOAD PROFILES ---------------------- */
+    useEffect(() => {
+        if (!user) return;
+        const profilesRef = collection(db, "artifacts", appId, "public", "data", "profiles");
+        const unsubscribe = onSnapshot(profilesRef, snap => {
+            setProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (err) => console.error("Profile load error:", err));
+        return () => unsubscribe();
+    }, [user]);
+
+    /* ---------------------- LOAD ENTRIES ---------------------- */
+    useEffect(() => {
+        if (!user || !activeProfile) return;
+
+        const today = new Date().toISOString().split("T")[0];
+        const entryId = `${activeProfile.id}_${today}`;
+        const entryRef = doc(db, "artifacts", appId, "public", "data", "entries", entryId);
+
+        const unsubEntry = onSnapshot(entryRef, snap => {
+            if (snap.exists()) setDailyData(snap.data());
+            else setDailyData({ ...getInitialDailyData(), profileId: activeProfile.id });
+        }, (err) => console.error("Entry snap error:", err));
+
+        const entriesRef = collection(db, "artifacts", appId, "public", "data", "entries");
+        const unsubArchive = onSnapshot(entriesRef, snap => {
+            const all = snap.docs
+                .map(d => d.data())
+                .filter(d => d.profileId === activeProfile.id)
+                .sort((a, b) => b.date.localeCompare(a.date));
+            setArchiveEntries(all);
+        }, (err) => console.error("Archive snap error:", err));
+
+        return () => {
+            unsubEntry();
+            unsubArchive();
+        };
+    }, [user, activeProfile]);
+
+    /* ---------------------- ACTIONS ---------------------- */
+    async function handleCreateProfile() {
+        if (!newProfile.name || !user) return;
+        const pid = crypto.randomUUID();
+        await setDoc(
+            doc(db, "artifacts", appId, "public", "data", "profiles", pid),
+            { id: pid, name: newProfile.name, color: newProfile.color, createdAt: new Date().toISOString() }
+        );
+        setShowAddProfile(false);
+        setNewProfile({ name: '', color: 'mint' });
+    }
+
+    async function handleSaveEntry() {
+        if (!activeProfile || !user) return;
+        setIsSaving(true);
+        const entryId = `${activeProfile.id}_${dailyData.date}`;
+        const entryRef = doc(db, "artifacts", appId, "public", "data", "entries", entryId);
+        try {
+            await setDoc(entryRef, {
+                ...dailyData,
+                profileId: activeProfile.id,
+                updatedAt: new Date().toISOString()
+            });
+        } catch (e) {
+            console.error("Save failed:", e);
+        }
+        setTimeout(() => setIsSaving(false), 700);
+    }
+
+    if (showGateway) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center p-6">
+                <h1 className="text-4xl font-bold text-gray-800 mb-12">Who is Journaling?</h1>
+                <div className="flex flex-wrap justify-center gap-8">
+                    {profiles.map(p => (
+                        <button key={p.id}
+                            onClick={() => { setActiveProfile(p); setShowGateway(false); }}
+                            className="group flex flex-col items-center space-y-4"
+                        >
+                            <div className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg transition-transform group-hover:scale-110"
+                                 style={{ backgroundColor: THEMES[p.color]?.bg }}>
+                                {p.name ? p.name[0].toUpperCase() : '?'}
+                            </div>
+                            <span className="text-lg text-gray-700 font-medium">{p.name}</span>
+                        </button>
+                    ))}
+                    <button onClick={() => setShowAddProfile(true)}
+                            className="group flex flex-col items-center space-y-4">
+                        <div className="w-24 h-24 rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center text-gray-400 group-hover:border-gray-500 transition-colors">
+                            <Plus size={32} />
+                        </div>
+                        <span className="text-lg text-gray-500">Add Profile</span>
+                    </button>
+                </div>
+
+                {showAddProfile && (
+                    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl">
+                            <div className="flex justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">New Profile</h2>
+                                <button onClick={() => setShowAddProfile(false)} className="text-gray-400 hover:text-gray-600"><X /></button>
+                            </div>
+                            <input type="text" placeholder="Name"
+                                className="w-full p-3 bg-gray-50 rounded-xl mb-4 focus:ring-2 focus:ring-gray-200 outline-none"
+                                value={newProfile.name}
+                                onChange={e => setNewProfile({ ...newProfile, name: e.target.value })}
+                            />
+                            <div className="flex gap-4 mb-6">
+                                {Object.entries(THEMES).map(([key, val]) => (
+                                    <button key={key}
+                                        onClick={() => setNewProfile({ ...newProfile, color: key })}
+                                        className={`w-10 h-10 rounded-full border-4 transition-all ${newProfile.color === key ? "border-black scale-110" : "border-transparent"}`}
+                                        style={{ backgroundColor: val.bg }}
+                                    />
+                                ))}
+                            </div>
+                            <button onClick={handleCreateProfile}
+                                    className="w-full py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-900 transition-colors">
+                                Create Profile
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    const theme = THEMES[activeProfile.color] || THEMES.mint;
+    const todayDate = new Date();
+    const daysInMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).getDate();
+
+    return (
+        <div className="min-h-screen flex flex-col bg-[#F8F9FA]">
+            <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b px-6 py-4 flex justify-between items-center">
+                <div className="bg-gray-100 px-4 py-1 rounded-full text-xs font-bold text-gray-500">
+                    {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                </div>
+                <h1 className="hidden md:block text-xl font-black text-gray-800">Daily Planner</h1>
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setCurrentView(currentView === "archive" ? "dashboard" : "archive")}
+                        className="text-sm font-bold text-gray-600 flex items-center gap-2 hover:text-gray-900 transition-colors"
+                    >
+                        {currentView === "archive" ? <ChevronLeft size={18}/> : <Archive size={18}/>}
+                        <span>{currentView === "archive" ? "Today" : "Archive"}</span>
+                    </button>
+                    <button 
+                        onClick={() => setShowGateway(true)}
+                        className="w-10 h-10 rounded-full text-white font-bold text-sm shadow-md transition-transform hover:scale-105"
+                        style={{ backgroundColor: theme.bg }}
+                    >
+                        {activeProfile.name ? activeProfile.name[0].toUpperCase() : 'P'}
+                    </button>
+                </div>
+            </header>
+
+            <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+                {currentView === "dashboard" && (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div className="lg:col-span-3 space-y-6">
+                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
+                                <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><Calendar size={18}/> Calendar</h3>
+                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-gray-300 font-bold">
+                                    {['S','M','T','W','T','F','S'].map((d,i)=>(<div key={i}>{d}</div>))}
+                                    {Array.from({length: daysInMonth}, (_,i)=> {
+                                        const isToday = i+1 === todayDate.getDate();
+                                        return (
+                                            <div key={i} className={`py-2 rounded-lg ${isToday ? "text-white font-bold shadow-sm scale-110" : "text-gray-400"}`} style={isToday ? { backgroundColor: theme.bg } : {}}>
+                                                {i+1}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
+                                <h3 className="font-bold mb-4 text-gray-800">Priorities</h3>
+                                {[0,1,2].map(idx => (
+                                    <div key={idx} className="flex items-center gap-3 mb-3">
+                                        <button onClick={() => {
+                                            const p = [...dailyData.priorities];
+                                            p[idx] = { ...p[idx], completed: !p[idx]?.completed };
+                                            setDailyData({ ...dailyData, priorities: p });
+                                        }}>
+                                            {dailyData.priorities[idx]?.completed ? <CheckCircle2 size={20} style={{ color: theme.dark }} /> : <Circle size={20} className="text-gray-200" />}
+                                        </button>
+                                        <input type="text" className="w-full text-sm outline-none handwritten bg-transparent" placeholder="Set focus..." value={dailyData.priorities[idx]?.text || ""} onChange={e => {
+                                            const p = [...dailyData.priorities];
+                                            p[idx] = { text: e.target.value, completed: p[idx]?.completed || false };
+                                            setDailyData({ ...dailyData, priorities: p });
+                                        }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="lg:col-span-6 bg-white rounded-[24px] border border-gray-100 shadow-xl relative p-10 pl-16 min-h-[800px]">
+                            <div className="absolute left-6 top-0 bottom-0 w-1 flex flex-col items-center justify-around py-8 pointer-events-none">
+                                {Array.from({ length: 24 }).map((_, i) => (
+                                    <div key={i} className="w-5 h-2 bg-gray-200 rounded-full -ml-8 border border-gray-300 shadow-sm" style={{ backgroundImage: 'linear-gradient(to bottom, #f1f1f1, #d1d1d1)' }} />
+                                ))}
+                            </div>
+                            <h2 className="text-3xl font-black mb-8 text-gray-800">Daily Flow</h2>
+                            <div className="mb-10">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-4">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tasks</h4>
+                                    <button onClick={() => setDailyData({ ...dailyData, todos: [...dailyData.todos, { text: '', completed: false }] })} className="text-gray-400 hover:text-gray-600 transition-colors"><Plus size={16}/></button>
+                                </div>
+                                {dailyData.todos.map((t,i)=>(
+                                    <div key={i} className="flex items-center gap-3 mb-3 group">
+                                        <button onClick={() => {
+                                            const arr = [...dailyData.todos]; arr[i].completed = !arr[i].completed;
+                                            setDailyData({ ...dailyData, todos: arr });
+                                        }}>{t.completed ? <CheckCircle2 size={20} style={{color:theme.dark}}/> : <Circle size={20} className="text-gray-200"/>}</button>
+                                        <input type="text" className={`flex-1 text-sm outline-none bg-transparent ${t.completed ? "line-through text-gray-300" : "text-gray-700"}`} value={t.text} onChange={e=>{
+                                            const arr = [...dailyData.todos]; arr[i].text = e.target.value;
+                                            setDailyData({ ...dailyData, todos: arr });
+                                        }} />
+                                        <button onClick={() => setDailyData({...dailyData, todos: dailyData.todos.filter((_, idx) => idx !== i)})} className="opacity-0 group-hover:opacity-100 text-red-200 hover:text-red-400 transition-opacity"><Trash2 size={16}/></button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mb-10">
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Schedule</h4>
+                                {dailyData.schedule.map((s,i)=>(
+                                    <div key={i} className="flex gap-4 mb-4 items-center">
+                                        <span className="text-[10px] text-gray-300 font-bold w-10 text-right">{s.time}</span>
+                                        <input type="text" className="flex-1 border-b border-dashed border-gray-100 pb-1 text-sm text-gray-600 outline-none focus:border-gray-300 transition-colors bg-transparent" value={s.task} onChange={e=>{
+                                            const ns = [...dailyData.schedule]; ns[i].task = e.target.value;
+                                            setDailyData({ ...dailyData, schedule: ns });
+                                        }} />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mt-12 flex flex-col items-center">
+                                <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-4">Hydration</h4>
+                                <div className="flex gap-2">
+                                    {[...Array(8)].map((_,i)=>(
+                                        <button key={i} className="hover:scale-125 transition-transform" onClick={()=>setDailyData({...dailyData, water: i+1})}>
+                                            <Droplet size={24} fill={i < dailyData.water ? "#87CEEB" : "none"} stroke={i < dailyData.water ? "#87CEEB" : "#E5E7EB"} />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="lg:col-span-3 space-y-6">
+                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm h-[300px] flex flex-col">
+                                <h3 className="font-bold mb-4 text-gray-800">Journal</h3>
+                                <textarea placeholder="Write about your day..." className="flex-1 w-full text-sm outline-none resize-none leading-relaxed text-gray-700 bg-transparent" style={{ backgroundImage: 'linear-gradient(#f9f9f9 1px, transparent 1px)', backgroundSize: '100% 1.5rem' }} value={dailyData.journal} onChange={e=>setDailyData({...dailyData, journal: e.target.value})} />
+                            </div>
+
+                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
+                                <h3 className="font-bold mb-6 text-gray-800">Mood & Health</h3>
+                                {["productivity","mood","health"].map(cat=>(
+                                    <div key={cat} className="mb-6">
+                                        <div className="flex justify-between text-[10px] uppercase text-gray-400 font-bold mb-2 tracking-widest"><span>{cat}</span><span style={{color:theme.dark}}>{dailyData.ratings[cat]}/5</span></div>
+                                        <div className="flex gap-2">
+                                            {[1,2,3,4,5].map(s=>(
+                                                <button key={s} className="hover:scale-125 transition-transform" onClick={()=>setDailyData({ ...dailyData, ratings: { ...dailyData.ratings, [cat]: s } })}>
+                                                    <Star size={18} fill={s <= dailyData.ratings[cat] ? theme.bg : "none"} stroke={s <= dailyData.ratings[cat] ? theme.bg : "#E5E7EB"} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {currentView === "archive" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-500">
+                        {archiveEntries.length === 0 && <div className="col-span-full text-center py-20 text-gray-400 font-medium">No archived entries yet.</div>}
+                        {archiveEntries.map((e,i)=>(
+                            <div key={i} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition cursor-pointer" onClick={()=>{ setDailyData(e); setCurrentView("dashboard"); }}>
+                                <p className="font-bold text-gray-800 mb-2">{new Date(e.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+                                <p className="text-sm text-gray-500 line-clamp-2 italic">{e.journal || "No notes captured for this day..."}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
+
+            {currentView === "dashboard" && (
+                <button onClick={handleSaveEntry} disabled={isSaving} className="fixed bottom-8 left-1/2 -translate-x-1/2 px-10 py-4 rounded-full text-white font-bold shadow-2xl flex items-center gap-3 hover:scale-105 active:scale-95 disabled:opacity-70 transition-all z-50" style={{ backgroundColor: theme.bg }}>
+                    {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={20} />}
+                    <span>{isSaving ? "Saving..." : "Save Today"}</span>
+                </button>
+            )}
+        </div>
+    );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+</script>
+</body>
+</html>
