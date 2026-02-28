@@ -417,6 +417,13 @@ header {
    FIREBASE INITIALIZATION (Secure)
    ====================================================================== */
 
+<!-- Firebase SDKs (must load first) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<!-- Firebase Config MUST come after SDKs -->
+<script>
 const firebaseConfig = {
   apiKey: "AIzaSyDKTLQCLtETxELs28NCA-7N_itRSSUA0M",
   authDomain: "dailyflow-38035.firebaseapp.com",
@@ -430,6 +437,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+</script>
 
 /* ======================================================================
    GLOBAL STATE
@@ -970,14 +978,12 @@ window.onload = () => {
 </script>
 
 
-/* ======================================================================
-   chunk 4
-   ====================================================================== */
+
 
 
 
 <!-- ======================================================================
-     FINAL SAFETY FALLBACKS & CLOSING TAGS
+    chunk 4 FINAL SAFETY FALLBACKS & CLOSING TAGS
 ====================================================================== -->
 <script>
 
