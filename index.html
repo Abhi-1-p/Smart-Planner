@@ -3,433 +3,1034 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Daily Planner & Journal</title>
 
-    <!-- Tailwind CDN -->
+    <title>DailyFlow Planner</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=Patrick+Hand&display=swap" rel="stylesheet">
 
-    <!-- Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .handwritten { font-family: 'Patrick Hand', cursive; }
-        input::placeholder, textarea::placeholder { font-family: 'Patrick Hand', cursive; }
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
-        .line-clamp-2 {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
+<style>
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-    </style>
-</head>
+/* ============================================================
+   GLOBAL FONTS + RESET
+   ============================================================ */
+body {
+    font-family: "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.3s ease, color 0.3s ease;
+}
+.handwritten { font-family: 'Patrick Hand', cursive; }
 
-<body class="bg-[#F8F9FA]">
-<div id="root"></div>
-
-<script type="text/babel" data-type="module">
-
-/* ------------------------------------------------------
-   IMPORTS
------------------------------------------------------- */
-// Using pinned versions and shared dependencies to prevent React instance mismatch (Error #31)
-import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
-import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
-import { 
-    Plus, User, LogOut, Save, Calendar, CheckCircle2, 
-    Circle, Trash2, Droplet, Star, Utensils, Activity,
-    Archive, ChevronLeft, X
-} from 'https://esm.sh/lucide-react?deps=react@18.2.0';
-
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { 
-    getFirestore, doc, setDoc, getDoc, collection,
-    onSnapshot, query, where
-} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
-import {
-    getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-
-// Expose React globally for Babel's transpiled createElement calls
-window.React = React;
-window.ReactDOM = ReactDOM;
-
-/* ------------------------------------------------------
-   FIREBASE INIT
------------------------------------------------------- */
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'daily-planner-v1';
-
-/* ------------------------------------------------------
-   THEME DEFINITIONS
------------------------------------------------------- */
-const THEMES = {
-    mint: { bg: '#B8E1DD', light: '#E3F2F1', dark: '#86B5B0' },
-    blush: { bg: '#FFD1DC', light: '#FFF0F3', dark: '#E0A3B1' },
-    lavender: { bg: '#E0BBE4', light: '#F3E8F5', dark: '#B391B8' }
-};
-
-/* ------------------------------------------------------
-   MAIN APP COMPONENT
------------------------------------------------------- */
-function App() {
-
-    /* ---------------------- STATE ---------------------- */
-    const [user, setUser] = useState(null);
-    const [profiles, setProfiles] = useState([]);
-    const [activeProfile, setActiveProfile] = useState(null);
-    const [currentView, setCurrentView] = useState("dashboard");
-    const [showGateway, setShowGateway] = useState(true);
-
-    const [dailyData, setDailyData] = useState(getInitialDailyData());
-    const [archiveEntries, setArchiveEntries] = useState([]);
-
-    const [isSaving, setIsSaving] = useState(false);
-    const [showAddProfile, setShowAddProfile] = useState(false);
-
-    const [newProfile, setNewProfile] = useState({
-        name: "",
-        color: "mint"
-    });
-
-    function getInitialDailyData() {
-        return {
-            date: new Date().toISOString().split("T")[0],
-            priorities: [],
-            todos: [],
-            schedule: Array.from({ length: 13 }, (_, i) => ({ time: `${i + 9}:00`, task: '' })),
-            meals: { breakfast: '', lunch: '', dinner: '' },
-            water: 0,
-            journal: '',
-            expenses: [],
-            ratings: { productivity: 0, mood: 0, health: 0 },
-            fitness: { title: '', value: '' }
-        };
-    }
-
-    /* ---------------------- AUTH ---------------------- */
-    useEffect(() => {
-        const initAuth = async () => {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-        };
-        initAuth();
-        const unsubscribe = onAuthStateChanged(auth, setUser);
-        return () => unsubscribe();
-    }, []);
-
-    /* ---------------------- LOAD PROFILES ---------------------- */
-    useEffect(() => {
-        if (!user) return;
-        const profilesRef = collection(db, "artifacts", appId, "public", "data", "profiles");
-        const unsubscribe = onSnapshot(profilesRef, snap => {
-            setProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (err) => console.error("Profile load error:", err));
-        return () => unsubscribe();
-    }, [user]);
-
-    /* ---------------------- LOAD ENTRIES ---------------------- */
-    useEffect(() => {
-        if (!user || !activeProfile) return;
-
-        const today = new Date().toISOString().split("T")[0];
-        const entryId = `${activeProfile.id}_${today}`;
-        const entryRef = doc(db, "artifacts", appId, "public", "data", "entries", entryId);
-
-        const unsubEntry = onSnapshot(entryRef, snap => {
-            if (snap.exists()) setDailyData(snap.data());
-            else setDailyData({ ...getInitialDailyData(), profileId: activeProfile.id });
-        }, (err) => console.error("Entry snap error:", err));
-
-        const entriesRef = collection(db, "artifacts", appId, "public", "data", "entries");
-        const unsubArchive = onSnapshot(entriesRef, snap => {
-            const all = snap.docs
-                .map(d => d.data())
-                .filter(d => d.profileId === activeProfile.id)
-                .sort((a, b) => b.date.localeCompare(a.date));
-            setArchiveEntries(all);
-        }, (err) => console.error("Archive snap error:", err));
-
-        return () => {
-            unsubEntry();
-            unsubArchive();
-        };
-    }, [user, activeProfile]);
-
-    /* ---------------------- ACTIONS ---------------------- */
-    async function handleCreateProfile() {
-        if (!newProfile.name || !user) return;
-        const pid = crypto.randomUUID();
-        await setDoc(
-            doc(db, "artifacts", appId, "public", "data", "profiles", pid),
-            { id: pid, name: newProfile.name, color: newProfile.color, createdAt: new Date().toISOString() }
-        );
-        setShowAddProfile(false);
-        setNewProfile({ name: '', color: 'mint' });
-    }
-
-    async function handleSaveEntry() {
-        if (!activeProfile || !user) return;
-        setIsSaving(true);
-        const entryId = `${activeProfile.id}_${dailyData.date}`;
-        const entryRef = doc(db, "artifacts", appId, "public", "data", "entries", entryId);
-        try {
-            await setDoc(entryRef, {
-                ...dailyData,
-                profileId: activeProfile.id,
-                updatedAt: new Date().toISOString()
-            });
-        } catch (e) {
-            console.error("Save failed:", e);
-        }
-        setTimeout(() => setIsSaving(false), 700);
-    }
-
-    if (showGateway) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6">
-                <h1 className="text-4xl font-bold text-gray-800 mb-12">Who is Journaling?</h1>
-                <div className="flex flex-wrap justify-center gap-8">
-                    {profiles.map(p => (
-                        <button key={p.id}
-                            onClick={() => { setActiveProfile(p); setShowGateway(false); }}
-                            className="group flex flex-col items-center space-y-4"
-                        >
-                            <div className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg transition-transform group-hover:scale-110"
-                                 style={{ backgroundColor: THEMES[p.color]?.bg }}>
-                                {p.name ? p.name[0].toUpperCase() : '?'}
-                            </div>
-                            <span className="text-lg text-gray-700 font-medium">{p.name}</span>
-                        </button>
-                    ))}
-                    <button onClick={() => setShowAddProfile(true)}
-                            className="group flex flex-col items-center space-y-4">
-                        <div className="w-24 h-24 rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center text-gray-400 group-hover:border-gray-500 transition-colors">
-                            <Plus size={32} />
-                        </div>
-                        <span className="text-lg text-gray-500">Add Profile</span>
-                    </button>
-                </div>
-
-                {showAddProfile && (
-                    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl">
-                            <div className="flex justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-gray-800">New Profile</h2>
-                                <button onClick={() => setShowAddProfile(false)} className="text-gray-400 hover:text-gray-600"><X /></button>
-                            </div>
-                            <input type="text" placeholder="Name"
-                                className="w-full p-3 bg-gray-50 rounded-xl mb-4 focus:ring-2 focus:ring-gray-200 outline-none"
-                                value={newProfile.name}
-                                onChange={e => setNewProfile({ ...newProfile, name: e.target.value })}
-                            />
-                            <div className="flex gap-4 mb-6">
-                                {Object.entries(THEMES).map(([key, val]) => (
-                                    <button key={key}
-                                        onClick={() => setNewProfile({ ...newProfile, color: key })}
-                                        className={`w-10 h-10 rounded-full border-4 transition-all ${newProfile.color === key ? "border-black scale-110" : "border-transparent"}`}
-                                        style={{ backgroundColor: val.bg }}
-                                    />
-                                ))}
-                            </div>
-                            <button onClick={handleCreateProfile}
-                                    className="w-full py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-900 transition-colors">
-                                Create Profile
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    const theme = THEMES[activeProfile.color] || THEMES.mint;
-    const todayDate = new Date();
-    const daysInMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).getDate();
-
-    return (
-        <div className="min-h-screen flex flex-col bg-[#F8F9FA]">
-            <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b px-6 py-4 flex justify-between items-center">
-                <div className="bg-gray-100 px-4 py-1 rounded-full text-xs font-bold text-gray-500">
-                    {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                </div>
-                <h1 className="hidden md:block text-xl font-black text-gray-800">Daily Planner</h1>
-                <div className="flex items-center gap-4">
-                    <button 
-                        onClick={() => setCurrentView(currentView === "archive" ? "dashboard" : "archive")}
-                        className="text-sm font-bold text-gray-600 flex items-center gap-2 hover:text-gray-900 transition-colors"
-                    >
-                        {currentView === "archive" ? <ChevronLeft size={18}/> : <Archive size={18}/>}
-                        <span>{currentView === "archive" ? "Today" : "Archive"}</span>
-                    </button>
-                    <button 
-                        onClick={() => setShowGateway(true)}
-                        className="w-10 h-10 rounded-full text-white font-bold text-sm shadow-md transition-transform hover:scale-105"
-                        style={{ backgroundColor: theme.bg }}
-                    >
-                        {activeProfile.name ? activeProfile.name[0].toUpperCase() : 'P'}
-                    </button>
-                </div>
-            </header>
-
-            <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
-                {currentView === "dashboard" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        <div className="lg:col-span-3 space-y-6">
-                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
-                                <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><Calendar size={18}/> Calendar</h3>
-                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-gray-300 font-bold">
-                                    {['S','M','T','W','T','F','S'].map((d,i)=>(<div key={i}>{d}</div>))}
-                                    {Array.from({length: daysInMonth}, (_,i)=> {
-                                        const isToday = i+1 === todayDate.getDate();
-                                        return (
-                                            <div key={i} className={`py-2 rounded-lg ${isToday ? "text-white font-bold shadow-sm scale-110" : "text-gray-400"}`} style={isToday ? { backgroundColor: theme.bg } : {}}>
-                                                {i+1}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
-                                <h3 className="font-bold mb-4 text-gray-800">Priorities</h3>
-                                {[0,1,2].map(idx => (
-                                    <div key={idx} className="flex items-center gap-3 mb-3">
-                                        <button onClick={() => {
-                                            const p = [...dailyData.priorities];
-                                            p[idx] = { ...p[idx], completed: !p[idx]?.completed };
-                                            setDailyData({ ...dailyData, priorities: p });
-                                        }}>
-                                            {dailyData.priorities[idx]?.completed ? <CheckCircle2 size={20} style={{ color: theme.dark }} /> : <Circle size={20} className="text-gray-200" />}
-                                        </button>
-                                        <input type="text" className="w-full text-sm outline-none handwritten bg-transparent" placeholder="Set focus..." value={dailyData.priorities[idx]?.text || ""} onChange={e => {
-                                            const p = [...dailyData.priorities];
-                                            p[idx] = { text: e.target.value, completed: p[idx]?.completed || false };
-                                            setDailyData({ ...dailyData, priorities: p });
-                                        }} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="lg:col-span-6 bg-white rounded-[24px] border border-gray-100 shadow-xl relative p-10 pl-16 min-h-[800px]">
-                            <div className="absolute left-6 top-0 bottom-0 w-1 flex flex-col items-center justify-around py-8 pointer-events-none">
-                                {Array.from({ length: 24 }).map((_, i) => (
-                                    <div key={i} className="w-5 h-2 bg-gray-200 rounded-full -ml-8 border border-gray-300 shadow-sm" style={{ backgroundImage: 'linear-gradient(to bottom, #f1f1f1, #d1d1d1)' }} />
-                                ))}
-                            </div>
-                            <h2 className="text-3xl font-black mb-8 text-gray-800">Daily Flow</h2>
-                            <div className="mb-10">
-                                <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-4">
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tasks</h4>
-                                    <button onClick={() => setDailyData({ ...dailyData, todos: [...dailyData.todos, { text: '', completed: false }] })} className="text-gray-400 hover:text-gray-600 transition-colors"><Plus size={16}/></button>
-                                </div>
-                                {dailyData.todos.map((t,i)=>(
-                                    <div key={i} className="flex items-center gap-3 mb-3 group">
-                                        <button onClick={() => {
-                                            const arr = [...dailyData.todos]; arr[i].completed = !arr[i].completed;
-                                            setDailyData({ ...dailyData, todos: arr });
-                                        }}>{t.completed ? <CheckCircle2 size={20} style={{color:theme.dark}}/> : <Circle size={20} className="text-gray-200"/>}</button>
-                                        <input type="text" className={`flex-1 text-sm outline-none bg-transparent ${t.completed ? "line-through text-gray-300" : "text-gray-700"}`} value={t.text} onChange={e=>{
-                                            const arr = [...dailyData.todos]; arr[i].text = e.target.value;
-                                            setDailyData({ ...dailyData, todos: arr });
-                                        }} />
-                                        <button onClick={() => setDailyData({...dailyData, todos: dailyData.todos.filter((_, idx) => idx !== i)})} className="opacity-0 group-hover:opacity-100 text-red-200 hover:text-red-400 transition-opacity"><Trash2 size={16}/></button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="mb-10">
-                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Schedule</h4>
-                                {dailyData.schedule.map((s,i)=>(
-                                    <div key={i} className="flex gap-4 mb-4 items-center">
-                                        <span className="text-[10px] text-gray-300 font-bold w-10 text-right">{s.time}</span>
-                                        <input type="text" className="flex-1 border-b border-dashed border-gray-100 pb-1 text-sm text-gray-600 outline-none focus:border-gray-300 transition-colors bg-transparent" value={s.task} onChange={e=>{
-                                            const ns = [...dailyData.schedule]; ns[i].task = e.target.value;
-                                            setDailyData({ ...dailyData, schedule: ns });
-                                        }} />
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="mt-12 flex flex-col items-center">
-                                <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-4">Hydration</h4>
-                                <div className="flex gap-2">
-                                    {[...Array(8)].map((_,i)=>(
-                                        <button key={i} className="hover:scale-125 transition-transform" onClick={()=>setDailyData({...dailyData, water: i+1})}>
-                                            <Droplet size={24} fill={i < dailyData.water ? "#87CEEB" : "none"} stroke={i < dailyData.water ? "#87CEEB" : "#E5E7EB"} />
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="lg:col-span-3 space-y-6">
-                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm h-[300px] flex flex-col">
-                                <h3 className="font-bold mb-4 text-gray-800">Journal</h3>
-                                <textarea placeholder="Write about your day..." className="flex-1 w-full text-sm outline-none resize-none leading-relaxed text-gray-700 bg-transparent" style={{ backgroundImage: 'linear-gradient(#f9f9f9 1px, transparent 1px)', backgroundSize: '100% 1.5rem' }} value={dailyData.journal} onChange={e=>setDailyData({...dailyData, journal: e.target.value})} />
-                            </div>
-
-                            <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
-                                <h3 className="font-bold mb-6 text-gray-800">Mood & Health</h3>
-                                {["productivity","mood","health"].map(cat=>(
-                                    <div key={cat} className="mb-6">
-                                        <div className="flex justify-between text-[10px] uppercase text-gray-400 font-bold mb-2 tracking-widest"><span>{cat}</span><span style={{color:theme.dark}}>{dailyData.ratings[cat]}/5</span></div>
-                                        <div className="flex gap-2">
-                                            {[1,2,3,4,5].map(s=>(
-                                                <button key={s} className="hover:scale-125 transition-transform" onClick={()=>setDailyData({ ...dailyData, ratings: { ...dailyData.ratings, [cat]: s } })}>
-                                                    <Star size={18} fill={s <= dailyData.ratings[cat] ? theme.bg : "none"} stroke={s <= dailyData.ratings[cat] ? theme.bg : "#E5E7EB"} />
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {currentView === "archive" && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-500">
-                        {archiveEntries.length === 0 && <div className="col-span-full text-center py-20 text-gray-400 font-medium">No archived entries yet.</div>}
-                        {archiveEntries.map((e,i)=>(
-                            <div key={i} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition cursor-pointer" onClick={()=>{ setDailyData(e); setCurrentView("dashboard"); }}>
-                                <p className="font-bold text-gray-800 mb-2">{new Date(e.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
-                                <p className="text-sm text-gray-500 line-clamp-2 italic">{e.journal || "No notes captured for this day..."}</p>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </main>
-
-            {currentView === "dashboard" && (
-                <button onClick={handleSaveEntry} disabled={isSaving} className="fixed bottom-8 left-1/2 -translate-x-1/2 px-10 py-4 rounded-full text-white font-bold shadow-2xl flex items-center gap-3 hover:scale-105 active:scale-95 disabled:opacity-70 transition-all z-50" style={{ backgroundColor: theme.bg }}>
-                    {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={20} />}
-                    <span>{isSaving ? "Saving..." : "Save Today"}</span>
-                </button>
-            )}
-        </div>
-    );
+/* ============================================================
+   THEMES (6 Themes)
+   ============================================================ */
+:root {
+    --accent: #4ade80; /* mint */
+    --accent-soft: rgba(74,222,128,0.15);
+    --bg: #f8f9fb;
+    --text: #1f2937;
+    --card-bg: rgba(255,255,255,0.35);
+    --card-border: rgba(255,255,255,0.4);
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+.theme-blush {
+    --accent: #fb7185;
+    --accent-soft: rgba(251,113,133,0.2);
+}
+.theme-lavender {
+    --accent: #c084fc;
+    --accent-soft: rgba(192,132,252,0.15);
+}
+.theme-ocean {
+    --accent: #38bdf8;
+    --accent-soft: rgba(56,189,248,0.15);
+}
+.theme-sunset {
+    --accent: #f97316;
+    --accent-soft: rgba(249,115,22,0.15);
+}
+.theme-slate {
+    --accent: #64748b;
+    --accent-soft: rgba(100,116,139,0.15);
+}
+
+/* DARK MODE */
+.dark {
+    --bg: #0d0f12;
+    --text: #e5e7eb;
+    --card-bg: rgba(255,255,255,0.06);
+    --card-border: rgba(255,255,255,0.1);
+}
+
+/* ============================================================
+   GLASS CARD STYLE
+   ============================================================ */
+.glass-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(12px);
+    border-radius: 24px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    padding: 24px;
+}
+
+/* ============================================================
+   HEADER (Glassmorphism)
+   ============================================================ */
+header {
+    background: rgba(255,255,255,0.35);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.4);
+}
+
+.logo-icon {
+    width: 32px;
+    height: 32px;
+}
+
+/* ============================================================
+   LOGIN MODAL
+   ============================================================ */
+#login-modal {
+    display: none;
+}
+
+.modal-backdrop {
+    background: rgba(0,0,0,0.45);
+}
+
+/* ============================================================
+   TOGGLES & BUTTONS
+   ============================================================ */
+.theme-btn { 
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+}
+.theme-btn.active { border-color: var(--accent); }
+
+.toggle-dark {
+    width: 48px;
+    height: 24px;
+    background: var(--accent-soft);
+    border-radius: 20px;
+    position: relative;
+    cursor: pointer;
+    transition: 0.3s;
+}
+.toggle-dark::after {
+    content: "";
+    width: 20px; height: 20px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: absolute;
+    left: 3px; top: 2px;
+    transition: 0.3s;
+}
+.dark .toggle-dark::after {
+    transform: translateX(24px);
+}
+
+/* ============================================================
+   CALENDAR HOVER EFFECT
+   ============================================================ */
+.calendar-day:hover {
+    transform: scale(1.08);
+    transition: 0.15s ease;
+    background: var(--accent-soft) !important;
+}
+
+/* smooth fade */
+.fade-in { animation: fadeIn 0.35s ease; }
+@keyframes fadeIn { from { opacity:0;} to {opacity:1;} }
+
+</style>
+</head>
+
+<body class="fade-in">
+
+<!-- ============================================================
+     LOGIN MODAL (Name + Password)
+   ============================================================ -->
+<div id="login-modal" class="fixed inset-0 flex items-center justify-center modal-backdrop z-[9999]">
+    <div class="glass-card w-[90%] max-w-md p-8">
+        <h2 class="text-2xl font-bold mb-6">Welcome to DailyFlow</h2>
+
+        <input id="login-name" 
+               class="w-full p-3 rounded-xl bg-white/40 mb-4 outline-none"
+               placeholder="Enter your name">
+
+        <input id="login-pass" 
+               type="password"
+               class="w-full p-3 rounded-xl bg-white/40 mb-6 outline-none"
+               placeholder="Enter password">
+
+        <button onclick="userLogin()" 
+                class="w-full py-3 rounded-xl font-bold text-white"
+                style="background: var(--accent);">
+            Enter
+        </button>
+    </div>
+</div>
+
+<!-- ============================================================
+     GLOSSY HEADER WITH LOGO & NAV
+   ============================================================ -->
+<header class="shadow-sm">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+
+        <!-- Logo + App Name -->
+        <div class="flex items-center gap-3">
+            <!-- Beautiful Calendar Icon -->
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="4"></rect>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+                <circle cx="8" cy="15" r="2"></circle>
+                <circle cx="16" cy="15" r="2"></circle>
+            </svg>
+
+            <span class="font-black text-xl">DailyFlow</span>
+        </div>
+
+        <!-- Right-side controls -->
+        <div class="flex items-center gap-6">
+
+            <!-- Theme selector menu -->
+            <div class="flex items-center gap-2">
+                <div class="theme-btn" style="background:#4ade80;" onclick="setTheme('mint')"></div>
+                <div class="theme-btn" style="background:#fb7185;" onclick="setTheme('blush')"></div>
+                <div class="theme-btn" style="background:#c084fc;" onclick="setTheme('lavender')"></div>
+                <div class="theme-btn" style="background:#38bdf8;" onclick="setTheme('ocean')"></div>
+                <div class="theme-btn" style="background:#f97316;" onclick="setTheme('sunset')"></div>
+                <div class="theme-btn" style="background:#64748b;" onclick="setTheme('slate')"></div>
+            </div>
+
+            <!-- Dark mode toggle -->
+            <div class="toggle-dark" onclick="toggleDarkMode()"></div>
+
+            <!-- User Badge -->
+            <div id="user-badge" 
+                 class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg"
+                 style="background: var(--accent); color: white;">
+                ?
+            </div>
+        </div>
+    </div>
+
+    <!-- Name Bar -->
+    <div id="name-bar" class="max-w-6xl mx-auto px-6 pb-4 text-gray-600 text-sm">
+        Loading user...
+    </div>
+</header>
+
+
+<!-- ============================================================
+     MAIN CONTENT WRAPPER
+   ============================================================ -->
+<main id="main-view" class="flex-1 max-w-6xl mx-auto w-full p-6 space-y-10 fade-in">
+
+<!-- GRID LAYOUT --------------------------------------------------- -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+    <!-- LEFT COLUMN ================================================= -->
+    <div class="lg:col-span-3 space-y-6">
+
+        <!-- CALENDAR ------------------------------------------------- -->
+        <div class="glass-card">
+            <h3 class="font-bold mb-4 flex items-center gap-2 text-lg">
+                📆 Calendar
+            </h3>
+
+            <div id="calendar-grid" 
+                 class="grid grid-cols-7 gap-2 text-center text-sm font-medium">
+                <!-- JS injects calendar days -->
+            </div>
+        </div>
+
+        <!-- PRIORITIES ------------------------------------------------ -->
+        <div class="glass-card">
+            <h3 class="font-bold mb-4 text-lg">Priorities</h3>
+
+            <div id="priority-list" class="space-y-3"></div>
+
+            <button onclick="addPriority()"
+                class="w-full mt-4 py-2 text-white font-semibold rounded-xl transition"
+                style="background: var(--accent);">
+                + Add Priority
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MIDDLE COLUMN =============================================== -->
+    <div class="lg:col-span-6 space-y-8">
+
+        <!-- DAILY FLOW HEADER ---------------------------------------- -->
+        <div class="glass-card">
+            <h2 class="text-3xl font-black mb-6" style="color: var(--accent);">
+                Daily Flow
+            </h2>
+
+            <!-- TASKS ------------------------------------------------ -->
+            <div class="mb-10">
+                <div class="flex justify-between items-center border-b pb-2 mb-4 border-gray-300/40">
+                    <h4 class="text-xs uppercase font-bold text-gray-400">Tasks</h4>
+                    <button onclick="addTask()" 
+                            class="text-xl font-bold text-gray-500 hover:text-black">＋</button>
+                </div>
+                <div id="task-list" class="space-y-3"></div>
+            </div>
+
+            <!-- SCHEDULE --------------------------------------------- -->
+            <div class="mb-10">
+                <h4 class="text-xs uppercase font-bold text-gray-400 border-b pb-2 mb-4">
+                    Schedule
+                </h4>
+                <div id="schedule-list" class="space-y-4"></div>
+            </div>
+
+            <!-- HYDRATION -------------------------------------------- -->
+            <div class="mt-12 flex flex-col items-center">
+                <h4 class="text-xs uppercase font-bold text-gray-400 mb-4">Hydration</h4>
+                <div id="water-tracker" class="flex gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT COLUMN =============================================== -->
+    <div class="lg:col-span-3 space-y-6">
+
+        <!-- JOURNAL ------------------------------------------------- -->
+        <div class="glass-card h-[320px] flex flex-col">
+            <h3 class="font-bold mb-4 text-lg">Journal</h3>
+
+            <textarea id="journal-input"
+                class="flex-1 w-full text-sm outline-none resize-none p-3 rounded-xl handwritten bg-white/40 dark:bg-white/10"
+                placeholder="Write about your day..."
+                style="min-height: 200px;"></textarea>
+        </div>
+
+        <!-- RATINGS -------------------------------------------------- -->
+        <div class="glass-card">
+            <h3 class="font-bold mb-6 text-lg">Mood & Health</h3>
+
+            <div id="rating-section" class="space-y-6"></div>
+        </div>
+    </div>
+
+</div>
+
+</main>
+
+
+<!-- ============================================================
+     SAVE BUTTON — THEME AWARE
+   ============================================================ -->
+<button id="save-btn"
+    onclick="saveEntry()"
+    class="fixed bottom-8 left-1/2 -translate-x-1/2 px-10 py-4 rounded-full text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition"
+    style="background: var(--accent);">
+    Save Today
+</button>
+
+
+<!-- ============================================================
+     SEARCH PANEL (updated styling)
+   ============================================================ -->
+<div id="search-panel"
+     class="fixed inset-0 hidden bg-black/40 backdrop-blur-md z-[9998] p-6 flex items-start justify-center">
+    <div class="glass-card w-full max-w-2xl p-8 shadow-xl">
+
+        <h2 class="text-2xl font-bold mb-4">🔍 Search Archive</h2>
+
+        <input id="search-input"
+               class="w-full p-3 bg-white/40 rounded-xl mb-4 outline-none"
+               placeholder="Search by date, text, mood, tasks..." />
+
+        <button onclick="performSearch()"
+                class="px-4 py-2 rounded-xl text-white font-semibold"
+                style="background: var(--accent);">
+            Search
+        </button>
+
+        <div id="search-results" class="max-h-[50vh] mt-4 overflow-y-auto"></div>
+
+        <button onclick="toggleSearchPanel()" 
+                class="mt-6 px-4 py-2 rounded-xl bg-gray-300/40 backdrop-blur-md">
+            Close
+        </button>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     INSIGHTS PANEL — PREMIUM UI
+   ============================================================ -->
+<div id="insights-panel"
+     class="fixed inset-0 hidden bg-black/40 backdrop-blur-md z-[9998] p-6 flex items-start justify-center">
+
+    <div class="glass-card w-full max-w-3xl p-8 overflow-y-auto max-h-[90vh]">
+
+        <h2 class="text-2xl font-bold mb-6" style="color: var(--accent);">
+            📊 Smart Insights
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+
+            <div>
+                <h3 class="font-semibold mb-2">Weekly Mood Average</h3>
+                <canvas id="chart-mood"></canvas>
+            </div>
+
+            <div>
+                <h3 class="font-semibold mb-2">Productivity Trend</h3>
+                <canvas id="chart-productivity"></canvas>
+            </div>
+
+            <div>
+                <h3 class="font-semibold mb-2">Hydration Consistency</h3>
+                <canvas id="chart-water"></canvas>
+            </div>
+
+            <div>
+                <h3 class="font-semibold mb-2">% Task Completion</h3>
+                <canvas id="chart-tasks"></canvas>
+            </div>
+
+        </div>
+
+        <button onclick="hideInsights()" 
+                class="mt-6 px-6 py-2 bg-gray-300/40 rounded-xl backdrop-blur-md">
+            Close
+        </button>
+    </div>
+</div>
+
+<script>
+/* ======================================================================
+   FIREBASE INITIALIZATION
+   ====================================================================== */
+
+const firebaseConfig = {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let activeProfileId = null;
+let activeUserName = "";
+let activeDate = new Date().toISOString().split("T")[0];
+
+let dailyData = {};
+let saveTimer = null;
+
+
+/* ======================================================================
+   LOGIN LOGIC — NAME + PASSWORD + FIRESTORE PROFILE STORAGE
+   ====================================================================== */
+
+// SHA-256 hashing for password (client-side)
+async function hashPassword(str) {
+    const buf = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function userLogin() {
+    const name = document.getElementById("login-name").value.trim();
+    const pass = document.getElementById("login-pass").value.trim();
+
+    if (!name || !pass) {
+        alert("Enter both name and password.");
+        return;
+    }
+
+    const hashed = await hashPassword(pass);
+    const profileId = "user_" + btoa(name).replace(/=/g, "");
+
+    // Check if profile exists
+    const docRef = db.collection("profiles").doc(profileId);
+    const snap = await docRef.get();
+
+    if (!snap.exists) {
+        // Create new user
+        await docRef.set({
+            id: profileId,
+            name,
+            passHash: hashed,
+            theme: "mint",
+            darkMode: false
+        });
+    } else {
+        if (snap.data().passHash !== hashed) {
+            alert("Incorrect password.");
+            return;
+        }
+    }
+
+    activeProfileId = profileId;
+    activeUserName = name;
+
+    // Save to localStorage
+    localStorage.setItem("DF_user", name);
+    localStorage.setItem("DF_hash", hashed);
+    localStorage.setItem("DF_uid", profileId);
+
+    // Close modal
+    document.getElementById("login-modal").style.display = "none";
+
+    // UI updates
+    document.getElementById("user-badge").innerText = name[0].toUpperCase();
+    document.getElementById("name-bar").innerText = `Hello, ${name} 👋 — ${new Date().toLocaleDateString("en-US", 
+        { weekday:"long", month:"short", day:"numeric"})}`;
+
+    // Load preferences
+    const prefs = (await docRef.get()).data();
+    setTheme(prefs.theme);
+    setDarkMode(prefs.darkMode);
+
+    loadEntry(activeDate);
+}
+
+
+/* ======================================================================
+   AUTO LOGIN (if saved in localStorage)
+   ====================================================================== */
+(async function autoLogin() {
+    const name = localStorage.getItem("DF_user");
+    const hash = localStorage.getItem("DF_hash");
+    const uid  = localStorage.getItem("DF_uid");
+
+    if (!name || !hash || !uid) {
+        document.getElementById("login-modal").style.display = "flex";
+        return;
+    }
+
+    const docRef = db.collection("profiles").doc(uid);
+    const snap = await docRef.get();
+
+    if (!snap.exists || snap.data().passHash !== hash) {
+        document.getElementById("login-modal").style.display = "flex";
+        return;
+    }
+
+    activeProfileId = uid;
+    activeUserName = name;
+
+    // update UI
+    document.getElementById("login-modal").style.display = "none";
+    document.getElementById("user-badge").innerText = name[0].toUpperCase();
+    document.getElementById("name-bar").innerText = `Hello, ${name} 👋 — ${new Date().toLocaleDateString("en-US", 
+        { weekday:"long", month:"short", day:"numeric"})}`;
+
+    // load theme prefs
+    const prefs = snap.data();
+    setTheme(prefs.theme);
+    setDarkMode(prefs.darkMode);
+
+    loadEntry(activeDate);
+})();
+
+
+/* ======================================================================
+   THEME SYSTEM (6 THEMES)
+   ====================================================================== */
+
+function setTheme(themeName) {
+    document.body.classList.remove(
+        "theme-blush", "theme-lavender", "theme-ocean", "theme-sunset", "theme-slate"
+    );
+
+    if (themeName !== "mint") {
+        document.body.classList.add(`theme-${themeName}`);
+    }
+
+    localStorage.setItem("DF_theme", themeName);
+
+    // Update Firestore
+    if (activeProfileId) {
+        db.collection("profiles").doc(activeProfileId).update({ theme: themeName });
+    }
+
+    // Highlight active theme
+    document.querySelectorAll(".theme-btn").forEach(btn => btn.classList.remove("active"));
+    const indexMap = { mint:0, blush:1, lavender:2, ocean:3, sunset:4, slate:5 };
+    document.querySelectorAll(".theme-btn")[indexMap[themeName]].classList.add("active");
+}
+
+
+/* ======================================================================
+   DARK MODE SYSTEM
+   ====================================================================== */
+
+function toggleDarkMode() {
+    const enabled = !document.body.classList.contains("dark");
+    setDarkMode(enabled);
+}
+
+function setDarkMode(enabled) {
+    if (enabled) document.body.classList.add("dark");
+    else document.body.classList.remove("dark");
+
+    localStorage.setItem("DF_dark", enabled ? "1" : "0");
+
+    if (activeProfileId) {
+        db.collection("profiles").doc(activeProfileId).update({ darkMode: enabled });
+    }
+}
+
+
+/* ======================================================================
+   CALENDAR RENDERING (THEME + DARK MODE)
+   ====================================================================== */
+
+function renderCalendar() {
+    const calendarEl = document.getElementById("calendar-grid");
+    calendarEl.innerHTML = "";
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const days = new Date(year, month + 1, 0).getDate();
+
+    const weekdays = ['S','M','T','W','T','F','S'];
+    weekdays.forEach(d => {
+        const p = document.createElement("div");
+        p.className = "text-xs text-gray-500 dark:text-gray-400 font-bold";
+        p.innerText = d;
+        calendarEl.appendChild(p);
+    });
+
+    for (let i = 1; i <= days; i++) {
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        const isToday = dateStr === new Date().toISOString().split("T")[0];
+
+        const el = document.createElement("div");
+        el.innerText = i;
+        el.className = 
+          "calendar-day p-2 rounded-xl transition font-semibold cursor-pointer " +
+          (isToday ? "text-white" : "text-gray-700 dark:text-gray-300");
+        
+        if (isToday) el.style.background = "var(--accent)";
+        else el.style.background = "var(--card-bg)";
+
+        el.onclick = () => loadEntry(dateStr);
+
+        calendarEl.appendChild(el);
+    }
+}
+
+
+/* ======================================================================
+   LOAD ENTRY FROM FIRESTORE
+   ====================================================================== */
+
+async function loadEntry(dateStr) {
+    activeDate = dateStr;
+    const id = `${activeProfileId}_${dateStr}`;
+    const ref = db.collection("plannerEntries").doc(id);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+        showPopup("Missing Entry", `No data found for ${dateStr}. New entry created.`);
+        dailyData = defaultData(dateStr);
+    } else {
+        dailyData = snap.data();
+    }
+
+    renderAll();
+}
+
+
+/* ======================================================================
+   SAVE ENTRY
+   ====================================================================== */
+
+async function saveEntry(show = true) {
+    if (!activeProfileId) {
+        showPopup("Error", "You must log in first.");
+        return;
+    }
+
+    dailyData.journal = document.getElementById("journal-input").value;
+    dailyData.date = activeDate;
+
+    const id = `${activeProfileId}_${activeDate}`;
+    await db.collection("plannerEntries").doc(id).set(dailyData);
+
+    if (show) showPopup("Saved!", "Your entry has been updated.");
+}
+
+
+/* ======================================================================
+   DEFAULT ENTRY TEMPLATE
+   ====================================================================== */
+
+function defaultData(date) {
+    return {
+        profileId: activeProfileId,
+        date,
+        priorities: [],
+        todos: [],
+        schedule: Array.from({length:13},(_,i)=>({time:`${i+9}:00`,task:""})),
+        water: 0,
+        journal: "",
+        ratings: { mood:0, productivity:0, health:0 }
+    };
+}
+
+
+/* ======================================================================
+   RENDER FUNCTIONS (PRIORITIES, TASKS, SCHEDULE, JOURNAL, RATINGS)
+   ====================================================================== */
+
+function renderAll() {
+    document.getElementById("journal-input").value = dailyData.journal || "";
+
+    renderCalendar();
+    renderPriorities();
+    renderTasks();
+    renderSchedule();
+    renderWater();
+    renderRatings();
+}
+
+
+/* priorities */
+function renderPriorities() {
+    const container = document.getElementById("priority-list");
+    container.innerHTML = "";
+
+    dailyData.priorities.forEach((p,i)=>{
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-3";
+
+        const btn = document.createElement("button");
+        btn.innerText = p.completed ? "✔️" : "⭕";
+        btn.onclick = ()=>{ p.completed=!p.completed; saveEntry(false); renderPriorities(); };
+
+        const inp = document.createElement("input");
+        inp.value = p.text;
+        inp.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none handwritten dark:bg-white/10";
+        inp.oninput = e=>{ p.text=e.target.value; };
+
+        row.append(btn,inp);
+        container.appendChild(row);
+    });
+}
+
+function addPriority() {
+    dailyData.priorities.push({text:"",completed:false});
+    renderPriorities();
+}
+
+
+/* tasks */
+function renderTasks() {
+    const container = document.getElementById("task-list");
+    container.innerHTML = "";
+
+    dailyData.todos.forEach((t,i)=>{
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-3";
+
+        const btn = document.createElement("button");
+        btn.innerText = t.completed ? "✔️" : "⭕";
+        btn.onclick = ()=>{ t.completed=!t.completed; saveEntry(false); renderTasks(); };
+
+        const inp = document.createElement("input");
+        inp.value = t.text;
+        inp.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none dark:bg-white/10";
+        inp.oninput = e=>{ t.text=e.target.value; };
+
+        if (t.completed) inp.classList.add("line-through","text-gray-500");
+
+        row.append(btn,inp);
+        container.appendChild(row);
+    });
+}
+
+function addTask() {
+    dailyData.todos.push({text:"",completed:false});
+    renderTasks();
+}
+
+
+/* schedule */
+function renderSchedule() {
+    const container = document.getElementById("schedule-list");
+    container.innerHTML = "";
+
+    dailyData.schedule.forEach((s,i)=>{
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-4";
+
+        const time = document.createElement("span");
+        time.className = "w-12 text-xs text-gray-400 dark:text-gray-500";
+        time.innerText = s.time;
+
+        const inp = document.createElement("input");
+        inp.value = s.task;
+        inp.className = "flex-1 border-b pb-1 bg-transparent outline-none border-gray-400/40";
+        inp.oninput = e=>{ s.task=e.target.value; };
+
+        row.append(time,inp);
+        container.appendChild(row);
+    });
+}
+
+
+/* hydration */
+function renderWater() {
+    const c = document.getElementById("water-tracker");
+    c.innerHTML = "";
+
+    for (let i=1;i<=8;i++){
+        const b = document.createElement("button");
+        b.className = "text-2xl";
+        b.innerText = i<=dailyData.water ? "💧" : "🫧";
+        b.onclick =()=>{ dailyData.water=i; renderWater(); saveEntry(false);}
+        c.appendChild(b);
+    }
+}
+
+
+/* ratings */
+function renderRatings() {
+    const c = document.getElementById("rating-section");
+    c.innerHTML = "";
+
+    const fields = ["mood","productivity","health"];
+
+    fields.forEach(cat=>{
+        const block = document.createElement("div");
+
+        const label = document.createElement("div");
+        label.className = "flex justify-between text-xs text-gray-500 dark:text-gray-400";
+        label.innerHTML = `<span>${cat}</span><span>${dailyData.ratings[cat]}/5</span>`;
+
+        const row = document.createElement("div");
+        row.className = "flex gap-2";
+
+        for (let i=1;i<=5;i++){
+            const star = document.createElement("button");
+            star.innerText = i<=dailyData.ratings[cat] ? "⭐" : "☆";
+            star.onclick = ()=>{
+                dailyData.ratings[cat] = i;
+                renderRatings();
+                saveEntry(false);
+            };
+            row.appendChild(star);
+        }
+
+        block.append(label,row);
+        c.appendChild(block);
+    });
+}
+
+
+/* ======================================================================
+   SEARCH ENGINE
+   ====================================================================== */
+
+function toggleSearchPanel(){
+    document.getElementById("search-panel").classList.toggle("hidden");
+}
+
+async function performSearch() {
+    const q = document.getElementById("search-input").value.toLowerCase();
+    const out = document.getElementById("search-results");
+    out.innerHTML = "Searching...";
+
+    const snap = await db.collection("plannerEntries")
+        .where("profileId","==",activeProfileId)
+        .get();
+
+    const matches = [];
+
+    snap.forEach(doc=>{
+        const d = doc.data();
+        const str = JSON.stringify(d).toLowerCase();
+        if (str.includes(q)) matches.push(d);
+    });
+
+    if (matches.length===0){
+        out.innerHTML = "<p class='text-gray-400 italic'>No results found.</p>";
+        return;
+    }
+
+    out.innerHTML = matches.map(m=>`
+        <div class='p-4 glass-card mb-2'>
+            <p class='font-bold'>${m.date}</p>
+            <p class='text-sm text-gray-500 dark:text-gray-300'>
+                ${m.journal || "No journal entry."}
+            </p>
+        </div>
+    `).join("");
+}
+
+
+/* ======================================================================
+   INSIGHTS CHARTS
+   ====================================================================== */
+
+function showInsights(){
+    loadCharts();
+    document.getElementById("insights-panel").classList.remove("hidden");
+}
+
+function hideInsights(){
+    document.getElementById("insights-panel").classList.add("hidden");
+}
+
+async function loadCharts(){
+    const snap = await db.collection("plannerEntries")
+        .where("profileId","==",activeProfileId)
+        .get();
+
+    const rows = [];
+    snap.forEach(doc=>rows.push(doc.data()));
+    rows.sort((a,b)=>a.date.localeCompare(b.date));
+
+    const labels = rows.map(r=>r.date);
+
+    // Chart data:
+    const mood = rows.map(r=>r.ratings.mood);
+    const prod = rows.map(r=>r.ratings.productivity);
+    const water = rows.map(r=>r.water);
+    const taskPct = rows.map(r =>
+        r.todos.length===0 ? 0 :
+        Math.round((r.todos.filter(t=>t.completed).length / r.todos.length)*100)
+    );
+
+    makeLineChart("chart-mood", labels, mood, "Mood", "#c084fc");
+    makeLineChart("chart-productivity", labels, prod, "Productivity", "#38bdf8");
+    makeBarChart("chart-water", labels, water, "Hydration", "#4ade80");
+    makeBarChart("chart-tasks", labels, taskPct, "Task %", "#f97316");
+}
+
+function makeLineChart(id, labels, data, label, color) {
+    new Chart(document.getElementById(id),{
+        type:"line",
+        data:{ labels, datasets:[{
+            label,
+            data,
+            borderColor: color,
+            backgroundColor: color + "33",
+            tension:0.3,
+            borderWidth:2
+        }] }
+    });
+}
+
+function makeBarChart(id, labels, data, label, color) {
+    new Chart(document.getElementById(id),{
+        type:"bar",
+        data:{ labels, datasets:[{
+            label,
+            data,
+            backgroundColor: color
+        }] }
+    });
+}
+
+
+/* ======================================================================
+   POPUP UTILITY
+   ====================================================================== */
+
+function showPopup(title,msg){
+    document.getElementById("popup-title").innerText = title;
+    document.getElementById("popup-message").innerText = msg;
+    document.getElementById("popup-container").classList.remove("hidden");
+    document.getElementById("popup-container").classList.add("flex");
+}
+
+function closePopup(){
+    document.getElementById("popup-container").classList.add("hidden");
+}
+
+
+/* ======================================================================
+   AUTO-SAVE (Debounced)
+   ====================================================================== */
+
+document.addEventListener("input",()=>{
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>saveEntry(false), 900);
+});
+
+
+/* ======================================================================
+   SIMPLE LOCAL “AI-LIKE” SUMMARY (Heuristic)
+   ====================================================================== */
+
+function generateAISummary() {
+    const text = dailyData.journal || "";
+    if (!text || text.length < 20) {
+        showPopup("AI Summary", "Not enough journal content to summarize.");
+        return;
+    }
+
+    const parts = text.split(/[.!?]/).filter(s=>s.trim().length>4);
+    let summary = "";
+
+    if (parts.length === 1) summary = parts[0];
+    else summary = parts.slice(0,2).join(". ") + "...";
+
+    showPopup("AI Summary", summary);
+}
 
 </script>
+
+<!-- ======================================================================
+     FINAL INITIALIZATIONS + SAFETY FALLBACK
+   ====================================================================== -->
+<script>
+
+// Safety re-render if UI glitches
+window.onerror = function (msg, src, line, col, err) {
+    console.warn("Recovered from UI error:", msg);
+    try { renderAll(); } catch (e) {}
+};
+
+// On first load after login/theme ready
+window.addEventListener("load", () => {
+    try {
+        renderCalendar(); 
+        if (activeProfileId) loadEntry(activeDate);
+    } catch (e) {
+        console.warn("Initial load recover:", e);
+        renderCalendar();
+    }
+});
+
+</script>
+
 </body>
 </html>
+
+
+
+
+
