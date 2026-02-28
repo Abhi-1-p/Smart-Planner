@@ -401,21 +401,9 @@ header {
 </div>
 
 
-
-
 <!-- ======================================================
-     Chunk 3
+     FIREBASE SDK + CONFIG  (Place BEFORE Chunk 3 JS)
 ====================================================== -->
-
-
-
-
-
-<script>
-
-/* ======================================================================
-   FIREBASE INITIALIZATION (Secure)
-   ====================================================================== */
 
 <!-- Firebase SDKs (must load first) -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -438,6 +426,19 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 </script>
+
+<!-- ======================================================
+     Chunk 3
+====================================================== -->
+
+
+
+
+
+<script>
+
+
+
 
 /* ======================================================================
    GLOBAL STATE
