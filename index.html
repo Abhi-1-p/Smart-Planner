@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>DailyFlow Planner</title>
+    <title>Planorra – Your Daily Planner</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,56 +15,44 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Firebase -->
+    <!-- Firebase SDK (Compat Version for Browser HTML Apps) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
 <style>
 
-/* ============================================================
-   GLOBAL FONTS + RESET
-   ============================================================ */
+/* ----------------------------------------------------------
+   BASE FONTS + DEFAULTS
+---------------------------------------------------------- */
 body {
     font-family: "Inter", sans-serif;
     background: var(--bg);
     color: var(--text);
     transition: background 0.3s ease, color 0.3s ease;
 }
+
 .handwritten { font-family: 'Patrick Hand', cursive; }
 
-/* ============================================================
-   THEMES (6 Themes)
-   ============================================================ */
+/* ----------------------------------------------------------
+   THEMES
+---------------------------------------------------------- */
 :root {
-    --accent: #4ade80; /* mint */
+    --accent: #4ade80;
     --accent-soft: rgba(74,222,128,0.15);
+
     --bg: #f8f9fb;
     --text: #1f2937;
-    --card-bg: rgba(255,255,255,0.35);
-    --card-border: rgba(255,255,255,0.4);
+
+    --card-bg: rgba(255,255,255,0.45);
+    --card-border: rgba(255,255,255,0.55);
 }
 
-.theme-blush {
-    --accent: #fb7185;
-    --accent-soft: rgba(251,113,133,0.2);
-}
-.theme-lavender {
-    --accent: #c084fc;
-    --accent-soft: rgba(192,132,252,0.15);
-}
-.theme-ocean {
-    --accent: #38bdf8;
-    --accent-soft: rgba(56,189,248,0.15);
-}
-.theme-sunset {
-    --accent: #f97316;
-    --accent-soft: rgba(249,115,22,0.15);
-}
-.theme-slate {
-    --accent: #64748b;
-    --accent-soft: rgba(100,116,139,0.15);
-}
+.theme-blush { --accent:#fb7185; --accent-soft:rgba(251,113,133,0.2); }
+.theme-lavender { --accent:#c084fc; --accent-soft:rgba(192,132,252,0.2); }
+.theme-ocean { --accent:#38bdf8; --accent-soft:rgba(56,189,248,0.2); }
+.theme-sunset { --accent:#f97316; --accent-soft:rgba(249,115,22,0.2); }
+.theme-slate { --accent:#64748b; --accent-soft:rgba(100,116,139,0.2); }
 
 /* DARK MODE */
 .dark {
@@ -74,110 +62,70 @@ body {
     --card-border: rgba(255,255,255,0.1);
 }
 
-/* ============================================================
-   GLASS CARD STYLE
-   ============================================================ */
+/* ----------------------------------------------------------
+   GLASS CARD
+---------------------------------------------------------- */
 .glass-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     backdrop-filter: blur(12px);
     border-radius: 24px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.05);
     padding: 24px;
 }
 
-/* ============================================================
-   HEADER (Glassmorphism)
-   ============================================================ */
+/* ----------------------------------------------------------
+   HEADER BAR
+---------------------------------------------------------- */
 header {
-    background: rgba(255,255,255,0.35);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.3);
+    backdrop-filter: blur(15px);
+    border-bottom: 1px solid var(--card-border);
 }
 
-.logo-icon {
-    width: 32px;
-    height: 32px;
-}
-
-/* ============================================================
+/* ----------------------------------------------------------
    LOGIN MODAL
-   ============================================================ */
+---------------------------------------------------------- */
 #login-modal {
     display: none;
 }
-
 .modal-backdrop {
     background: rgba(0,0,0,0.45);
 }
 
-/* ============================================================
-   TOGGLES & BUTTONS
-   ============================================================ */
-.theme-btn { 
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    cursor: pointer;
-}
-.theme-btn.active { border-color: var(--accent); }
-
-.toggle-dark {
-    width: 48px;
-    height: 24px;
-    background: var(--accent-soft);
-    border-radius: 20px;
-    position: relative;
-    cursor: pointer;
-    transition: 0.3s;
-}
-.toggle-dark::after {
-    content: "";
-    width: 20px; height: 20px;
-    background: var(--accent);
-    border-radius: 50%;
-    position: absolute;
-    left: 3px; top: 2px;
-    transition: 0.3s;
-}
-.dark .toggle-dark::after {
-    transform: translateX(24px);
-}
-
-/* ============================================================
+/* ----------------------------------------------------------
    CALENDAR HOVER EFFECT
-   ============================================================ */
+---------------------------------------------------------- */
 .calendar-day:hover {
-    transform: scale(1.08);
-    transition: 0.15s ease;
     background: var(--accent-soft) !important;
+    transform: scale(1.07);
 }
 
-/* smooth fade */
-.fade-in { animation: fadeIn 0.35s ease; }
-@keyframes fadeIn { from { opacity:0;} to {opacity:1;} }
+/* Fade-in */
+.fade-in { animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
 
 </style>
 </head>
 
 <body class="fade-in">
 
-<!-- ============================================================
-     LOGIN MODAL (Name + Password)
-   ============================================================ -->
-<div id="login-modal" class="fixed inset-0 flex items-center justify-center modal-backdrop z-[9999]">
+<!-- ======================================================
+     LOGIN MODAL (Email + Password, Firebase Auth)
+====================================================== -->
+<div id="login-modal" class="fixed inset-0 modal-backdrop z-[9999] flex items-center justify-center">
     <div class="glass-card w-[90%] max-w-md p-8">
-        <h2 class="text-2xl font-bold mb-6">Welcome to DailyFlow</h2>
+        <h2 class="text-2xl font-bold mb-6">Welcome to Planorra</h2>
 
-        <input id="login-name" 
-               class="w-full p-3 rounded-xl bg-white/40 mb-4 outline-none"
-               placeholder="Enter your name">
+        <input id="login-email"
+               type="email"
+               placeholder="Email"
+               class="w-full p-3 rounded-xl bg-white/40 mb-4 outline-none" />
 
-        <input id="login-pass" 
+        <input id="login-pass"
                type="password"
-               class="w-full p-3 rounded-xl bg-white/40 mb-6 outline-none"
-               placeholder="Enter password">
+               placeholder="Password"
+               class="w-full p-3 rounded-xl bg-white/40 mb-6 outline-none" />
 
         <button onclick="userLogin()" 
                 class="w-full py-3 rounded-xl font-bold text-white"
@@ -187,29 +135,27 @@ header {
     </div>
 </div>
 
-<!-- ============================================================
-     GLOSSY HEADER WITH LOGO & NAV
-   ============================================================ -->
-<header class="shadow-sm">
+<!-- ======================================================
+     HEADER BAR
+====================================================== -->
+<header>
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
 
-        <!-- Logo + App Name -->
+        <!-- LOGO + BRAND -->
         <div class="flex items-center gap-3">
-            <!-- Beautiful Calendar Icon -->
-            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <svg width="32" height="32" stroke="var(--accent)" fill="none" stroke-width="2">
                 <rect x="3" y="4" width="18" height="18" rx="4"></rect>
                 <line x1="3" y1="10" x2="21" y2="10"></line>
                 <circle cx="8" cy="15" r="2"></circle>
                 <circle cx="16" cy="15" r="2"></circle>
             </svg>
-
-            <span class="font-black text-xl">DailyFlow</span>
+            <span class="font-black text-xl">Planorra</span>
         </div>
 
-        <!-- Right-side controls -->
+        <!-- RIGHT SIDE BUTTONS -->
         <div class="flex items-center gap-6">
 
-            <!-- Theme selector menu -->
+            <!-- THEME BUTTONS -->
             <div class="flex items-center gap-2">
                 <div class="theme-btn" style="background:#4ade80;" onclick="setTheme('mint')"></div>
                 <div class="theme-btn" style="background:#fb7185;" onclick="setTheme('blush')"></div>
@@ -219,49 +165,58 @@ header {
                 <div class="theme-btn" style="background:#64748b;" onclick="setTheme('slate')"></div>
             </div>
 
-            <!-- Dark mode toggle -->
+            <!-- DARK MODE TOGGLE -->
             <div class="toggle-dark" onclick="toggleDarkMode()"></div>
 
-            <!-- User Badge -->
-            <div id="user-badge" 
-                 class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg"
-                 style="background: var(--accent); color: white;">
+            <!-- USER BADGE -->
+            <div id="user-badge"
+                 class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg text-white"
+                 style="background:var(--accent);">
                 ?
             </div>
+
         </div>
+
     </div>
 
-    <!-- Name Bar -->
-    <div id="name-bar" class="max-w-6xl mx-auto px-6 pb-4 text-gray-600 text-sm">
-        Loading user...
+    <div id="name-bar" class="max-w-6xl mx-auto px-6 pb-3 text-gray-600 text-sm">
+        Loading user…
     </div>
 </header>
 
 
-<!-- ============================================================
-     MAIN CONTENT WRAPPER
-   ============================================================ -->
+
+
+
+<!-- ======================================================
+     Chunk 2
+====================================================== -->
+
+
+
+
+
+<!-- ======================================================
+     MAIN CONTENT
+====================================================== -->
 <main id="main-view" class="flex-1 max-w-6xl mx-auto w-full p-6 space-y-10 fade-in">
 
-<!-- GRID LAYOUT --------------------------------------------------- -->
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-    <!-- LEFT COLUMN ================================================= -->
+    <!-- ================= LEFT COLUMN ===================== -->
     <div class="lg:col-span-3 space-y-6">
 
-        <!-- CALENDAR ------------------------------------------------- -->
+        <!-- Calendar -->
         <div class="glass-card">
-            <h3 class="font-bold mb-4 flex items-center gap-2 text-lg">
-                📆 Calendar
-            </h3>
+            <h3 class="font-bold mb-4 text-lg">Calendar</h3>
 
-            <div id="calendar-grid" 
-                 class="grid grid-cols-7 gap-2 text-center text-sm font-medium">
-                <!-- JS injects calendar days -->
+            <div id="calendar-grid"
+                 class="grid grid-cols-7 gap-2 text-center text-sm font-bold">
+                <!-- JS renders calendar days here -->
             </div>
         </div>
 
-        <!-- PRIORITIES ------------------------------------------------ -->
+        <!-- Priorities -->
         <div class="glass-card">
             <h3 class="font-bold mb-4 text-lg">Priorities</h3>
 
@@ -276,45 +231,51 @@ header {
 
     </div>
 
-    <!-- MIDDLE COLUMN =============================================== -->
+
+    <!-- ================= MIDDLE COLUMN ===================== -->
     <div class="lg:col-span-6 space-y-8">
 
-        <!-- DAILY FLOW HEADER ---------------------------------------- -->
+        <!-- Daily Flow -->
         <div class="glass-card">
             <h2 class="text-3xl font-black mb-6" style="color: var(--accent);">
                 Daily Flow
             </h2>
 
-            <!-- TASKS ------------------------------------------------ -->
+            <!-- Tasks -->
             <div class="mb-10">
-                <div class="flex justify-between items-center border-b pb-2 mb-4 border-gray-300/40">
-                    <h4 class="text-xs uppercase font-bold text-gray-400">Tasks</h4>
+                <div class="flex justify-between items-center border-b pb-2 mb-4 border-gray-400/40">
+                    <h4 class="text-xs uppercase font-bold text-gray-500">Tasks</h4>
                     <button onclick="addTask()" 
                             class="text-xl font-bold text-gray-500 hover:text-black">＋</button>
                 </div>
+
                 <div id="task-list" class="space-y-3"></div>
             </div>
 
-            <!-- SCHEDULE --------------------------------------------- -->
+            <!-- Schedule -->
             <div class="mb-10">
-                <h4 class="text-xs uppercase font-bold text-gray-400 border-b pb-2 mb-4">
+                <h4 class="text-xs uppercase font-bold text-gray-500 border-b pb-2 mb-4">
                     Schedule
                 </h4>
+
                 <div id="schedule-list" class="space-y-4"></div>
             </div>
 
-            <!-- HYDRATION -------------------------------------------- -->
+            <!-- Hydration -->
             <div class="mt-12 flex flex-col items-center">
-                <h4 class="text-xs uppercase font-bold text-gray-400 mb-4">Hydration</h4>
+                <h4 class="text-xs uppercase font-bold text-gray-500 mb-4">Hydration</h4>
+
                 <div id="water-tracker" class="flex gap-3"></div>
             </div>
         </div>
+
     </div>
 
-    <!-- RIGHT COLUMN =============================================== -->
+
+    <!-- ================= RIGHT COLUMN ===================== -->
     <div class="lg:col-span-3 space-y-6">
 
-        <!-- JOURNAL ------------------------------------------------- -->
+        <!-- Journal -->
         <div class="glass-card h-[320px] flex flex-col">
             <h3 class="font-bold mb-4 text-lg">Journal</h3>
 
@@ -324,42 +285,43 @@ header {
                 style="min-height: 200px;"></textarea>
         </div>
 
-        <!-- RATINGS -------------------------------------------------- -->
+        <!-- Ratings -->
         <div class="glass-card">
             <h3 class="font-bold mb-6 text-lg">Mood & Health</h3>
 
             <div id="rating-section" class="space-y-6"></div>
         </div>
+
     </div>
 
 </div>
-
 </main>
 
 
-<!-- ============================================================
-     SAVE BUTTON — THEME AWARE
-   ============================================================ -->
+<!-- ======================================================
+     SAVE BUTTON
+====================================================== -->
 <button id="save-btn"
-    onclick="saveEntry()"
+    onclick="manualSave()"
     class="fixed bottom-8 left-1/2 -translate-x-1/2 px-10 py-4 rounded-full text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition"
-    style="background: var(--accent);">
+    style="background: var(--accent); z-index: 9999;">
     Save Today
 </button>
 
 
-<!-- ============================================================
-     SEARCH PANEL (updated styling)
-   ============================================================ -->
+<!-- ======================================================
+     SEARCH PANEL
+====================================================== -->
 <div id="search-panel"
      class="fixed inset-0 hidden bg-black/40 backdrop-blur-md z-[9998] p-6 flex items-start justify-center">
+
     <div class="glass-card w-full max-w-2xl p-8 shadow-xl">
 
         <h2 class="text-2xl font-bold mb-4">🔍 Search Archive</h2>
 
         <input id="search-input"
                class="w-full p-3 bg-white/40 rounded-xl mb-4 outline-none"
-               placeholder="Search by date, text, mood, tasks..." />
+               placeholder="Search by date, text or keyword..." />
 
         <button onclick="performSearch()"
                 class="px-4 py-2 rounded-xl text-white font-semibold"
@@ -377,9 +339,9 @@ header {
 </div>
 
 
-<!-- ============================================================
-     INSIGHTS PANEL — PREMIUM UI
-   ============================================================ -->
+<!-- ======================================================
+     INSIGHTS PANEL
+====================================================== -->
 <div id="insights-panel"
      class="fixed inset-0 hidden bg-black/40 backdrop-blur-md z-[9998] p-6 flex items-start justify-center">
 
@@ -392,7 +354,7 @@ header {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
 
             <div>
-                <h3 class="font-semibold mb-2">Weekly Mood Average</h3>
+                <h3 class="font-semibold mb-2">Weekly Mood Trend</h3>
                 <canvas id="chart-mood"></canvas>
             </div>
 
@@ -407,7 +369,7 @@ header {
             </div>
 
             <div>
-                <h3 class="font-semibold mb-2">% Task Completion</h3>
+                <h3 class="font-semibold mb-2">Task Completion %</h3>
                 <canvas id="chart-tasks"></canvas>
             </div>
 
@@ -420,168 +382,241 @@ header {
     </div>
 </div>
 
+
+<!-- ======================================================
+     POPUP SYSTEM (Global Notifications)
+====================================================== -->
+<div id="popup-container" 
+     class="fixed inset-0 hidden items-center justify-center bg-black/40 backdrop-blur-md z-[10000]">
+    <div class="glass-card w-[90%] max-w-sm p-6">
+        <h3 id="popup-title" class="font-bold text-xl mb-3"></h3>
+        <p id="popup-message" class="text-sm"></p>
+
+        <button onclick="closePopup()"
+                class="mt-4 px-4 py-2 rounded-xl text-white font-semibold"
+                style="background: var(--accent);">
+            Close
+        </button>
+    </div>
+</div>
+
+
+
+
+<!-- ======================================================
+     Chunk 3
+====================================================== -->
+
+
+
+
+
 <script>
+
 /* ======================================================================
-   FIREBASE INITIALIZATION
+   FIREBASE INITIALIZATION (Secure)
    ====================================================================== */
 
 const firebaseConfig = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+  apiKey: "AIzaSyDKTLQCLtETxELs28NCA-7N_itRSSUA0M",
+  authDomain: "dailyflow-38035.firebaseapp.com",
+  projectId: "dailyflow-38035",
+  storageBucket: "dailyflow-38035.appspot.com",
+  messagingSenderId: "94169858632",
+  appId: "1:94169858632:web:d8705b0c749975fa728e7d",
+  measurementId: "G-E9EGME32EH"
 };
 
 firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 const db = firebase.firestore();
 
+/* ======================================================================
+   GLOBAL STATE
+   ====================================================================== */
+
+let activeUser = null;
 let activeProfileId = null;
 let activeUserName = "";
 let activeDate = new Date().toISOString().split("T")[0];
+let unsubRealtime = null;
 
 let dailyData = {};
+
 let saveTimer = null;
 
-
 /* ======================================================================
-   LOGIN LOGIC — NAME + PASSWORD + FIRESTORE PROFILE STORAGE
+   LOGIN USING FIREBASE AUTH (Email + Password)
    ====================================================================== */
-
-// SHA-256 hashing for password (client-side)
-async function hashPassword(str) {
-    const buf = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest("SHA-256", buf);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
-}
 
 async function userLogin() {
-    const name = document.getElementById("login-name").value.trim();
+    const email = document.getElementById("login-email").value.trim();
     const pass = document.getElementById("login-pass").value.trim();
 
-    if (!name || !pass) {
-        alert("Enter both name and password.");
+    if (!email || !pass) {
+        showPopup("Missing Fields", "Please enter email and password.");
         return;
     }
 
-    const hashed = await hashPassword(pass);
-    const profileId = "user_" + btoa(name).replace(/=/g, "");
+    try {
+        // Try login
+        const cred = await auth.signInWithEmailAndPassword(email, pass);
+        await handleSuccessfulLogin(cred.user);
 
-    // Check if profile exists
-    const docRef = db.collection("profiles").doc(profileId);
-    const snap = await docRef.get();
-
-    if (!snap.exists) {
-        // Create new user
-        await docRef.set({
-            id: profileId,
-            name,
-            passHash: hashed,
-            theme: "mint",
-            darkMode: false
-        });
-    } else {
-        if (snap.data().passHash !== hashed) {
-            alert("Incorrect password.");
-            return;
+    } catch (err) {
+        // User not found → create new account
+        if (err.code === "auth/user-not-found") {
+            try {
+                const newCred = await auth.createUserWithEmailAndPassword(email, pass);
+                await createNewUserProfile(newCred.user);
+                await handleSuccessfulLogin(newCred.user);
+                showPopup("Welcome!", "Your new Planorra account has been created.");
+            } catch (e) {
+                showPopup("Signup Error", e.message);
+            }
+        } else {
+            showPopup("Login Error", err.message);
         }
     }
+}
 
-    activeProfileId = profileId;
-    activeUserName = name;
+async function handleSuccessfulLogin(user) {
+    activeUser = user;
+    activeProfileId = user.uid;
+    activeUserName = user.email;
 
-    // Save to localStorage
-    localStorage.setItem("DF_user", name);
-    localStorage.setItem("DF_hash", hashed);
-    localStorage.setItem("DF_uid", profileId);
-
-    // Close modal
     document.getElementById("login-modal").style.display = "none";
+    document.getElementById("user-badge").innerText = activeUserName[0].toUpperCase();
 
-    // UI updates
-    document.getElementById("user-badge").innerText = name[0].toUpperCase();
-    document.getElementById("name-bar").innerText = `Hello, ${name} 👋 — ${new Date().toLocaleDateString("en-US", 
-        { weekday:"long", month:"short", day:"numeric"})}`;
+    // load profile
+    const docRef = db.collection("profiles").doc(activeProfileId);
+    const snap = await docRef.get();
 
-    // Load preferences
-    const prefs = (await docRef.get()).data();
-    setTheme(prefs.theme);
-    setDarkMode(prefs.darkMode);
+    if (snap.exists) {
+        const prefs = snap.data();
+        setTheme(prefs.theme || "mint");
+        setDarkMode(prefs.darkMode || false);
+        document.getElementById("name-bar").innerText =
+            `Hello, ${prefs.name || activeUserName} 👋 — ` +
+            new Date().toLocaleDateString("en-US", {
+                weekday: "long", month: "short", day: "numeric"
+            });
+    }
 
     loadEntry(activeDate);
 }
 
+async function createNewUserProfile(user) {
+    await db.collection("profiles").doc(user.uid).set({
+        id: user.uid,
+        email: user.email,
+        name: user.email.split("@")[0],
+        theme: "mint",
+        darkMode: false
+    });
+}
 
 /* ======================================================================
-   AUTO LOGIN (if saved in localStorage)
+   REAL-TIME LOAD OF DAILY ENTRY (Firestore onSnapshot)
    ====================================================================== */
-(async function autoLogin() {
-    const name = localStorage.getItem("DF_user");
-    const hash = localStorage.getItem("DF_hash");
-    const uid  = localStorage.getItem("DF_uid");
 
-    if (!name || !hash || !uid) {
-        document.getElementById("login-modal").style.display = "flex";
-        return;
+async function loadEntry(dateStr) {
+    activeDate = dateStr;
+
+    if (unsubRealtime) unsubRealtime();
+
+    const entryId = `${activeProfileId}_${activeDate}`;
+    const ref = db.collection("plannerEntries").doc(entryId);
+
+    unsubRealtime = ref.onSnapshot((snap) => {
+        if (!snap.exists) {
+            dailyData = defaultEntry(dateStr);
+        } else {
+            dailyData = snap.data();
+        }
+        renderAll();
+    });
+}
+
+/* ======================================================================
+   DEFAULT ENTRY TEMPLATE
+   ====================================================================== */
+
+function defaultEntry(date) {
+    return {
+        profileId: activeProfileId,
+        date,
+        priorities: [],
+        todos: [],
+        schedule: Array.from({length:13},(_,i)=>({time:`${i+9}:00`, task:""})),
+        water: 0,
+        journal: "",
+        ratings: {
+            mood: 0,
+            productivity: 0,
+            health: 0
+        },
+        // keywords for fast searching
+        keywords: []
+    };
+}
+
+/* ======================================================================
+   SAVE ENTRY (Debounced + Manual Save)
+   ====================================================================== */
+
+function manualSave() {
+    saveEntry(true);
+}
+
+async function saveEntry(showPopupOnSuccess = false) {
+    if (!activeProfileId) return;
+
+    dailyData.journal = document.getElementById("journal-input").value;
+    dailyData.date = activeDate;
+
+    // Build keyword index
+    dailyData.keywords = generateKeywords(dailyData);
+
+    const entryId = `${activeProfileId}_${activeDate}`;
+
+    await db.collection("plannerEntries").doc(entryId).set(dailyData);
+
+    if (showPopupOnSuccess) {
+        showPopup("Saved!", "Your entry has been saved.");
     }
+}
 
-    const docRef = db.collection("profiles").doc(uid);
-    const snap = await docRef.get();
+document.addEventListener("input", () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveEntry(false), 900);
+});
 
-    if (!snap.exists || snap.data().passHash !== hash) {
-        document.getElementById("login-modal").style.display = "flex";
-        return;
-    }
+/* Keyword Indexing */
+function generateKeywords(data) {
+    let source = (data.journal || "") +
+        " " + data.todos.map(t=>t.text).join(" ") +
+        " " + data.priorities.map(p=>p.text).join(" ");
 
-    activeProfileId = uid;
-    activeUserName = name;
-
-    // update UI
-    document.getElementById("login-modal").style.display = "none";
-    document.getElementById("user-badge").innerText = name[0].toUpperCase();
-    document.getElementById("name-bar").innerText = `Hello, ${name} 👋 — ${new Date().toLocaleDateString("en-US", 
-        { weekday:"long", month:"short", day:"numeric"})}`;
-
-    // load theme prefs
-    const prefs = snap.data();
-    setTheme(prefs.theme);
-    setDarkMode(prefs.darkMode);
-
-    loadEntry(activeDate);
-})();
-
+    return source.toLowerCase().split(/\W+/).filter(x=>x.length>2);
+}
 
 /* ======================================================================
    THEME SYSTEM (6 THEMES)
    ====================================================================== */
 
-function setTheme(themeName) {
+function setTheme(name) {
     document.body.classList.remove(
-        "theme-blush", "theme-lavender", "theme-ocean", "theme-sunset", "theme-slate"
+        "theme-blush", "theme-lavender", "theme-ocean",
+        "theme-sunset", "theme-slate"
     );
 
-    if (themeName !== "mint") {
-        document.body.classList.add(`theme-${themeName}`);
+    if (name !== "mint") {
+        document.body.classList.add(`theme-${name}`);
     }
 
-    localStorage.setItem("DF_theme", themeName);
-
-    // Update Firestore
-    if (activeProfileId) {
-        db.collection("profiles").doc(activeProfileId).update({ theme: themeName });
-    }
-
-    // Highlight active theme
-    document.querySelectorAll(".theme-btn").forEach(btn => btn.classList.remove("active"));
-    const indexMap = { mint:0, blush:1, lavender:2, ocean:3, sunset:4, slate:5 };
-    document.querySelectorAll(".theme-btn")[indexMap[themeName]].classList.add("active");
+    db.collection("profiles").doc(activeProfileId).update({ theme: name });
 }
-
-
-/* ======================================================================
-   DARK MODE SYSTEM
-   ====================================================================== */
 
 function toggleDarkMode() {
     const enabled = !document.body.classList.contains("dark");
@@ -592,194 +627,127 @@ function setDarkMode(enabled) {
     if (enabled) document.body.classList.add("dark");
     else document.body.classList.remove("dark");
 
-    localStorage.setItem("DF_dark", enabled ? "1" : "0");
-
-    if (activeProfileId) {
-        db.collection("profiles").doc(activeProfileId).update({ darkMode: enabled });
-    }
+    db.collection("profiles").doc(activeProfileId).update({ darkMode: enabled });
 }
 
-
 /* ======================================================================
-   CALENDAR RENDERING (THEME + DARK MODE)
+   CALENDAR RENDERING
    ====================================================================== */
 
 function renderCalendar() {
-    const calendarEl = document.getElementById("calendar-grid");
-    calendarEl.innerHTML = "";
+    const grid = document.getElementById("calendar-grid");
+    grid.innerHTML = "";
 
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth();
+
     const days = new Date(year, month + 1, 0).getDate();
 
-    const weekdays = ['S','M','T','W','T','F','S'];
-    weekdays.forEach(d => {
-        const p = document.createElement("div");
-        p.className = "text-xs text-gray-500 dark:text-gray-400 font-bold";
-        p.innerText = d;
-        calendarEl.appendChild(p);
+    // Week headers
+    ["S","M","T","W","T","F","S"].forEach(d=>{
+        const label = document.createElement("div");
+        label.className = "text-xs text-gray-500 dark:text-gray-400 font-bold";
+        label.innerText = d;
+        grid.appendChild(label);
     });
 
-    for (let i = 1; i <= days; i++) {
-        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+    // Days
+    for (let i=1; i<=days; i++) {
+        const d = document.createElement("div");
+
+        const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(i).padStart(2,"0")}`;
         const isToday = dateStr === new Date().toISOString().split("T")[0];
 
-        const el = document.createElement("div");
-        el.innerText = i;
-        el.className = 
-          "calendar-day p-2 rounded-xl transition font-semibold cursor-pointer " +
-          (isToday ? "text-white" : "text-gray-700 dark:text-gray-300");
-        
-        if (isToday) el.style.background = "var(--accent)";
-        else el.style.background = "var(--card-bg)";
+        d.innerText = i;
+        d.className =
+            "calendar-day p-2 rounded-xl font-semibold cursor-pointer transition " +
+            (isToday ? "text-white" : "text-gray-700 dark:text-gray-300");
 
-        el.onclick = () => loadEntry(dateStr);
+        d.style.background = isToday ? "var(--accent)" : "var(--card-bg)";
 
-        calendarEl.appendChild(el);
+        d.onclick = () => loadEntry(dateStr);
+
+        grid.appendChild(d);
     }
 }
 
-
 /* ======================================================================
-   LOAD ENTRY FROM FIRESTORE
-   ====================================================================== */
-
-async function loadEntry(dateStr) {
-    activeDate = dateStr;
-    const id = `${activeProfileId}_${dateStr}`;
-    const ref = db.collection("plannerEntries").doc(id);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-        showPopup("Missing Entry", `No data found for ${dateStr}. New entry created.`);
-        dailyData = defaultData(dateStr);
-    } else {
-        dailyData = snap.data();
-    }
-
-    renderAll();
-}
-
-
-/* ======================================================================
-   SAVE ENTRY
-   ====================================================================== */
-
-async function saveEntry(show = true) {
-    if (!activeProfileId) {
-        showPopup("Error", "You must log in first.");
-        return;
-    }
-
-    dailyData.journal = document.getElementById("journal-input").value;
-    dailyData.date = activeDate;
-
-    const id = `${activeProfileId}_${activeDate}`;
-    await db.collection("plannerEntries").doc(id).set(dailyData);
-
-    if (show) showPopup("Saved!", "Your entry has been updated.");
-}
-
-
-/* ======================================================================
-   DEFAULT ENTRY TEMPLATE
-   ====================================================================== */
-
-function defaultData(date) {
-    return {
-        profileId: activeProfileId,
-        date,
-        priorities: [],
-        todos: [],
-        schedule: Array.from({length:13},(_,i)=>({time:`${i+9}:00`,task:""})),
-        water: 0,
-        journal: "",
-        ratings: { mood:0, productivity:0, health:0 }
-    };
-}
-
-
-/* ======================================================================
-   RENDER FUNCTIONS (PRIORITIES, TASKS, SCHEDULE, JOURNAL, RATINGS)
+   RENDER FUNCTIONS (FULL UI UPDATE)
    ====================================================================== */
 
 function renderAll() {
-    document.getElementById("journal-input").value = dailyData.journal || "";
-
     renderCalendar();
     renderPriorities();
     renderTasks();
     renderSchedule();
     renderWater();
     renderRatings();
+    document.getElementById("journal-input").value = dailyData.journal || "";
 }
 
-
-/* priorities */
+/* PRIORITIES */
 function renderPriorities() {
-    const container = document.getElementById("priority-list");
-    container.innerHTML = "";
+    const c = document.getElementById("priority-list");
+    c.innerHTML = "";
 
     dailyData.priorities.forEach((p,i)=>{
         const row = document.createElement("div");
         row.className = "flex items-center gap-3";
 
-        const btn = document.createElement("button");
-        btn.innerText = p.completed ? "✔️" : "⭕";
-        btn.onclick = ()=>{ p.completed=!p.completed; saveEntry(false); renderPriorities(); };
+        const check = document.createElement("button");
+        check.innerText = p.completed ? "✔️" : "⭕";
+        check.onclick = ()=>{ p.completed = !p.completed; saveEntry(false); renderPriorities(); };
 
-        const inp = document.createElement("input");
-        inp.value = p.text;
-        inp.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none handwritten dark:bg-white/10";
-        inp.oninput = e=>{ p.text=e.target.value; };
+        const input = document.createElement("input");
+        input.value = p.text;
+        input.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none dark:bg-white/10 handwritten";
+        input.oninput = e=>{ p.text = e.target.value; };
 
-        row.append(btn,inp);
-        container.appendChild(row);
+        row.append(check, input);
+        c.appendChild(row);
     });
 }
 
 function addPriority() {
-    dailyData.priorities.push({text:"",completed:false});
+    dailyData.priorities.push({text:"", completed:false});
     renderPriorities();
 }
 
-
-/* tasks */
+/* TASKS */
 function renderTasks() {
-    const container = document.getElementById("task-list");
-    container.innerHTML = "";
+    const c = document.getElementById("task-list");
+    c.innerHTML = "";
 
     dailyData.todos.forEach((t,i)=>{
         const row = document.createElement("div");
         row.className = "flex items-center gap-3";
 
-        const btn = document.createElement("button");
-        btn.innerText = t.completed ? "✔️" : "⭕";
-        btn.onclick = ()=>{ t.completed=!t.completed; saveEntry(false); renderTasks(); };
+        const check = document.createElement("button");
+        check.innerText = t.completed ? "✔️" : "⭕";
+        check.onclick = ()=>{ t.completed=!t.completed; saveEntry(false); renderTasks(); };
 
-        const inp = document.createElement("input");
-        inp.value = t.text;
-        inp.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none dark:bg-white/10";
-        inp.oninput = e=>{ t.text=e.target.value; };
+        const input = document.createElement("input");
+        input.value = t.text;
+        input.className = "flex-1 p-2 bg-white/40 rounded-xl outline-none dark:bg-white/10";
+        input.oninput = e=>{ t.text=e.target.value; };
 
-        if (t.completed) inp.classList.add("line-through","text-gray-500");
+        if (t.completed) input.classList.add("line-through", "text-gray-500");
 
-        row.append(btn,inp);
-        container.appendChild(row);
+        row.append(check, input);
+        c.appendChild(row);
     });
 }
 
 function addTask() {
-    dailyData.todos.push({text:"",completed:false});
+    dailyData.todos.push({text:"", completed:false});
     renderTasks();
 }
 
-
-/* schedule */
+/* SCHEDULE */
 function renderSchedule() {
-    const container = document.getElementById("schedule-list");
-    container.innerHTML = "";
+    const c = document.getElementById("schedule-list");
+    c.innerHTML = "";
 
     dailyData.schedule.forEach((s,i)=>{
         const row = document.createElement("div");
@@ -789,38 +757,35 @@ function renderSchedule() {
         time.className = "w-12 text-xs text-gray-400 dark:text-gray-500";
         time.innerText = s.time;
 
-        const inp = document.createElement("input");
-        inp.value = s.task;
-        inp.className = "flex-1 border-b pb-1 bg-transparent outline-none border-gray-400/40";
-        inp.oninput = e=>{ s.task=e.target.value; };
+        const input = document.createElement("input");
+        input.value = s.task;
+        input.className = "flex-1 border-b pb-1 bg-transparent outline-none border-gray-400/40";
+        input.oninput = e=>{ s.task=e.target.value; };
 
-        row.append(time,inp);
-        container.appendChild(row);
+        row.append(time, input);
+        c.appendChild(row);
     });
 }
 
-
-/* hydration */
+/* WATER */
 function renderWater() {
     const c = document.getElementById("water-tracker");
     c.innerHTML = "";
 
-    for (let i=1;i<=8;i++){
+    for (let i=1; i<=8; i++) {
         const b = document.createElement("button");
-        b.className = "text-2xl";
         b.innerText = i<=dailyData.water ? "💧" : "🫧";
-        b.onclick =()=>{ dailyData.water=i; renderWater(); saveEntry(false);}
+        b.className = "text-2xl";
+        b.onclick = ()=>{ dailyData.water=i; saveEntry(false); renderWater(); };
         c.appendChild(b);
     }
 }
 
-
-/* ratings */
+/* RATINGS */
 function renderRatings() {
+    const fields = ["mood","productivity","health"];
     const c = document.getElementById("rating-section");
     c.innerHTML = "";
-
-    const fields = ["mood","productivity","health"];
 
     fields.forEach(cat=>{
         const block = document.createElement("div");
@@ -832,205 +797,202 @@ function renderRatings() {
         const row = document.createElement("div");
         row.className = "flex gap-2";
 
-        for (let i=1;i<=5;i++){
+        for (let i=1; i<=5; i++) {
             const star = document.createElement("button");
             star.innerText = i<=dailyData.ratings[cat] ? "⭐" : "☆";
             star.onclick = ()=>{
                 dailyData.ratings[cat] = i;
-                renderRatings();
                 saveEntry(false);
+                renderRatings();
             };
             row.appendChild(star);
         }
 
-        block.append(label,row);
+        block.append(label, row);
         c.appendChild(block);
     });
 }
 
-
 /* ======================================================================
-   SEARCH ENGINE
+   SEARCH (Keyword Indexed)
    ====================================================================== */
 
-function toggleSearchPanel(){
+function toggleSearchPanel() {
     document.getElementById("search-panel").classList.toggle("hidden");
 }
 
 async function performSearch() {
-    const q = document.getElementById("search-input").value.toLowerCase();
+    const term = document.getElementById("search-input").value.toLowerCase();
+    if (!term) return;
+
     const out = document.getElementById("search-results");
-    out.innerHTML = "Searching...";
+    out.innerHTML = "Searching…";
 
     const snap = await db.collection("plannerEntries")
         .where("profileId","==",activeProfileId)
+        .where("keywords","array-contains", term)
         .get();
 
-    const matches = [];
-
-    snap.forEach(doc=>{
-        const d = doc.data();
-        const str = JSON.stringify(d).toLowerCase();
-        if (str.includes(q)) matches.push(d);
-    });
-
-    if (matches.length===0){
-        out.innerHTML = "<p class='text-gray-400 italic'>No results found.</p>";
+    if (snap.empty) {
+        out.innerHTML = "<p class='text-gray-400 italic'>No matches found.</p>";
         return;
     }
 
-    out.innerHTML = matches.map(m=>`
-        <div class='p-4 glass-card mb-2'>
-            <p class='font-bold'>${m.date}</p>
-            <p class='text-sm text-gray-500 dark:text-gray-300'>
-                ${m.journal || "No journal entry."}
-            </p>
-        </div>
-    `).join("");
+    out.innerHTML = "";
+
+    snap.forEach(doc=>{
+        const d = doc.data();
+        out.innerHTML += `
+            <div class="glass-card mb-3">
+                <p class="font-bold text-lg">${d.date}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-300">${d.journal || "No journal"}</p>
+            </div>`;
+    });
 }
 
-
 /* ======================================================================
-   INSIGHTS CHARTS
+   INSIGHTS (Charts)
    ====================================================================== */
 
-function showInsights(){
+function showInsights() {
     loadCharts();
     document.getElementById("insights-panel").classList.remove("hidden");
 }
-
-function hideInsights(){
+function hideInsights() {
     document.getElementById("insights-panel").classList.add("hidden");
 }
 
-async function loadCharts(){
+async function loadCharts() {
     const snap = await db.collection("plannerEntries")
         .where("profileId","==",activeProfileId)
         .get();
 
     const rows = [];
-    snap.forEach(doc=>rows.push(doc.data()));
+    snap.forEach(d=>rows.push(d.data()));
     rows.sort((a,b)=>a.date.localeCompare(b.date));
 
     const labels = rows.map(r=>r.date);
-
-    // Chart data:
     const mood = rows.map(r=>r.ratings.mood);
     const prod = rows.map(r=>r.ratings.productivity);
     const water = rows.map(r=>r.water);
-    const taskPct = rows.map(r =>
-        r.todos.length===0 ? 0 :
-        Math.round((r.todos.filter(t=>t.completed).length / r.todos.length)*100)
-    );
+    const tasks = rows.map(r => {
+        if (!r.todos.length) return 0;
+        const pct = (r.todos.filter(t=>t.completed).length / r.todos.length) * 100;
+        return Math.round(pct);
+    });
 
     makeLineChart("chart-mood", labels, mood, "Mood", "#c084fc");
     makeLineChart("chart-productivity", labels, prod, "Productivity", "#38bdf8");
     makeBarChart("chart-water", labels, water, "Hydration", "#4ade80");
-    makeBarChart("chart-tasks", labels, taskPct, "Task %", "#f97316");
+    makeBarChart("chart-tasks", labels, tasks, "Completion %", "#f97316");
 }
 
-function makeLineChart(id, labels, data, label, color) {
-    new Chart(document.getElementById(id),{
-        type:"line",
-        data:{ labels, datasets:[{
-            label,
+function makeLineChart(id, labels, data, lbl, color) {
+    new Chart(document.getElementById(id), {
+        type: "line",
+        data: { labels, datasets: [{
+            label: lbl,
             data,
             borderColor: color,
-            backgroundColor: color + "33",
-            tension:0.3,
-            borderWidth:2
+            backgroundColor: color+"44",
+            tension: 0.3,
+            borderWidth: 2
         }] }
     });
 }
 
-function makeBarChart(id, labels, data, label, color) {
-    new Chart(document.getElementById(id),{
-        type:"bar",
-        data:{ labels, datasets:[{
-            label,
+function makeBarChart(id, labels, data, lbl, color) {
+    new Chart(document.getElementById(id), {
+        type: "bar",
+        data: { labels, datasets: [{
+            label: lbl,
             data,
             backgroundColor: color
         }] }
     });
 }
 
-
 /* ======================================================================
-   POPUP UTILITY
+   POPUP SYSTEM
    ====================================================================== */
 
-function showPopup(title,msg){
+function showPopup(title, msg) {
     document.getElementById("popup-title").innerText = title;
     document.getElementById("popup-message").innerText = msg;
-    document.getElementById("popup-container").classList.remove("hidden");
-    document.getElementById("popup-container").classList.add("flex");
+
+    const box = document.getElementById("popup-container");
+    box.classList.remove("hidden");
+    box.classList.add("flex");
 }
 
-function closePopup(){
-    document.getElementById("popup-container").classList.add("hidden");
+function closePopup() {
+    const box = document.getElementById("popup-container");
+    box.classList.add("hidden");
 }
-
 
 /* ======================================================================
-   AUTO-SAVE (Debounced)
+   INITIAL LOAD
    ====================================================================== */
 
-document.addEventListener("input",()=>{
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(()=>saveEntry(false), 900);
-});
+window.onload = () => {
+    renderCalendar();
 
+    auth.onAuthStateChanged((user)=>{
+        if (user) {
+            activeUser = user;
+            activeProfileId = user.uid;
+            activeUserName = user.email;
 
-/* ======================================================================
-   SIMPLE LOCAL “AI-LIKE” SUMMARY (Heuristic)
-   ====================================================================== */
+            document.getElementById("login-modal").style.display = "none";
+            document.getElementById("user-badge").innerText = activeUserName[0].toUpperCase();
 
-function generateAISummary() {
-    const text = dailyData.journal || "";
-    if (!text || text.length < 20) {
-        showPopup("AI Summary", "Not enough journal content to summarize.");
-        return;
-    }
+            db.collection("profiles").doc(activeProfileId).get().then(snap=>{
+                if (snap.exists) {
+                    const prefs = snap.data();
+                    setTheme(prefs.theme);
+                    setDarkMode(prefs.darkMode);
+                    document.getElementById("name-bar").innerText =
+                        `Hello, ${prefs.name} 👋 — ` +
+                        new Date().toLocaleDateString("en-US", {
+                            weekday:"long", month:"short", day:"numeric"
+                        });
+                }
+            });
 
-    const parts = text.split(/[.!?]/).filter(s=>s.trim().length>4);
-    let summary = "";
+            loadEntry(activeDate);
 
-    if (parts.length === 1) summary = parts[0];
-    else summary = parts.slice(0,2).join(". ") + "...";
-
-    showPopup("AI Summary", summary);
-}
+        } else {
+            document.getElementById("login-modal").style.display = "flex";
+        }
+    });
+};
 
 </script>
 
+
+/* ======================================================================
+   chunk 4
+   ====================================================================== */
+
+
+
 <!-- ======================================================================
-     FINAL INITIALIZATIONS + SAFETY FALLBACK
-   ====================================================================== -->
+     FINAL SAFETY FALLBACKS & CLOSING TAGS
+====================================================================== -->
 <script>
 
-// Safety re-render if UI glitches
+// Recover from unexpected runtime errors
 window.onerror = function (msg, src, line, col, err) {
-    console.warn("Recovered from UI error:", msg);
+    console.warn("Recovered from runtime error:", msg);
     try { renderAll(); } catch (e) {}
 };
 
-// On first load after login/theme ready
-window.addEventListener("load", () => {
-    try {
-        renderCalendar(); 
-        if (activeProfileId) loadEntry(activeDate);
-    } catch (e) {
-        console.warn("Initial load recover:", e);
-        renderCalendar();
-    }
+// Final DOM readiness check
+document.addEventListener("DOMContentLoaded", () => {
+    try { renderCalendar(); } catch (e) {}
 });
 
 </script>
 
 </body>
 </html>
-
-
-
-
-
